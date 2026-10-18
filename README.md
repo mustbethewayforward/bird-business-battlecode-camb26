@@ -8,6 +8,8 @@ Python bot for Cambridge Battlecode. Built and tested with `cambc` CLI **2.2.5**
 | --- | --- |
 | `bots/sprint1/src/main.py` | Entry point: the turn loop. Every turn is wrapped in try/except, so a bug never crashes the bot; errors are printed as `turn error: ... at <line numbers>`. |
 | `bots/sprint1/src/bot.py` | All decisions: draft, shopping, retreat, tribute, enemy carriers, camp farming. Tunables are at the top. |
+| `bots/sprint2/` | **Current submission.** sprint1 plus attack-reset abilities (extra hit every 8 turns) and always hitting back when an enemy champion is hitting us. |
+| `bots/ganker/` | Test opponent only: sprint1 tuned to attack any visible enemy champion, ignoring numbers. Reproduces the platform losses (we were hunted down solo). |
 | `bots/inspect/` | Map inspector: prints camp groups, altars and an ASCII picture of a map. |
 | `maps/` | Local test maps (`.map26a`). |
 | `scripts/suite.py` | Plays a bot against an opponent on every map from both sides, reporting wins, errors and fuel. |
@@ -76,6 +78,17 @@ Each champion runs `bot.py`. In priority order, each turn it:
 | e6f13c58 (100×100) | loss | loss |
 
 The bot wins 7/10 from each side, with zero `turn error`s. The worst non-first turn uses 2.02M of the 2.5M fuel budget.
+
+## Sprint 2 change (from platform losses)
+
+Unranked games vs top-75 teams were all losses: across 4 summarised matches we had 0 kills and 94 deaths. Top teams roam in groups with stuns and kill our champions one at a time while they farm alone. sprint2 is the change that fitted in one hour before the lock. Full release games on all maps, both sides:
+
+| | sprint1 | sprint2 |
+| --- | --- | --- |
+| vs ganker | 6/20 | 11/20 |
+| vs starter | 14/20 | 14/20 |
+
+Zero errors, and the worst later turn uses 2.02M fuel. The real fix is next: move and fight as a pack, focus fire, stuns.
 
 ## Known weaknesses / next steps
 
