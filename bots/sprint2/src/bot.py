@@ -17,7 +17,7 @@ SQUAD_WAIT = 80
 BLACKLIST_ROUNDS = 60
 CARRIER_GEMS = 15
 CARRIER_HP = 0.5
-MOVE_FUEL_RESERVE = 1_300_000
+MOVE_FUEL_RESERVE = 600_000  # BFS max ~0.5M (measured); 1.3M froze big maps
 
 PICK_ORDER = [
     bc.ChampionDraft.RYTH, bc.ChampionDraft.VARG, bc.ChampionDraft.MARCELLA,
