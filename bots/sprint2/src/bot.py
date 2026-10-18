@@ -119,6 +119,7 @@ class State:
     enemies = []
     static_blocked = None
     was_alive = True
+    rng = 1
 
 
 st = State()
@@ -136,6 +137,7 @@ def init():
     allies = bc.champions(ALLY)
     st.handles = sorted(int(c) for c in allies)
     st.slot = st.handles.index(int(me))
+    st.rng = me.attack_range()
     stats = [c.base_stats() for c in allies]
     avg_str = sum(s.base_strength for s in stats) / len(stats)
     avg_hp = sum(s.base_health for s in stats) / len(stats)
@@ -460,7 +462,7 @@ def can_reach(me, info):
             return True
         spots = bc.Bitboard()  # camps ringed by holes need range
         for t in info.tiles.positions():
-            spots.draw_chebyshev(t, me.attack_range())
+            spots.draw_chebyshev(t, st.rng)
         spots &= st.walkable
         spots &= ~info.tiles
         info.reach = not spots.is_empty()
@@ -470,7 +472,7 @@ def can_reach(me, info):
 def target_ok(info, rnd, pos, alive):
     if info.skip or info.need > alive or st.blacklist.get(info.idx, 0) > rnd:
         return False
-    if not can_reach(bc.me(), info):
+    if not can_reach(None, info):
         return False
     return info.respawn_at - rnd <= dist(pos, info.center)
 
@@ -484,7 +486,10 @@ def pick_target(me, rnd, dry=False):
         if cur.need > 1 or cur.reward or not any(k < st.slot for k in others):
             return cur
     best, best_score = None, 0.0
+    my_str = max(1.0, me.strength())  # SDK calls ~20k each: once, not per group
     for info in st.groups:
+        if bc.fuel_remaining() < 700_000:  # many-group maps overran fuel on platform
+            break
         if not target_ok(info, rnd, pos, alive):
             continue
         others = len(committed_others(info))
@@ -501,7 +506,7 @@ def pick_target(me, rnd, dry=False):
             value /= n
             if 0 < others < n:
                 value *= 3.0
-            score = value / (d + info.hp / (n * max(1.0, me.strength())) + 5 + 10)
+            score = value / (d + info.hp / (n * my_str) + 5 + 10)
         if score > best_score:
             best, best_score = info, score
     if not dry:
