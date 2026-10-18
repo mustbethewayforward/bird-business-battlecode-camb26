@@ -1,4 +1,3 @@
-"""Entry point: dispatch draft and gameplay. A failed turn is swallowed and still yields."""
 import cambc as bc
 import bot
 
@@ -10,7 +9,7 @@ def main():
                 bot.draft_turn()
             else:
                 bot.play_turn()
-        except Exception as e:  # never let a bug crash the bot
+        except Exception as e:  # never crash; log line numbers
             tb, where = e.__traceback__, []
             while tb is not None:
                 where.append(str(tb.tb_lineno))

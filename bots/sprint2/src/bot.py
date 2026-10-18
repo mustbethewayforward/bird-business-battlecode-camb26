@@ -1,50 +1,23 @@
-"""CAMBC Sprint 1 bot: squad camp farmer.
-
-Every champion runs this same file. Each turn, in priority order:
-  1. Shop (on spawn, while dead, or anywhere for Tavi).
-  2. Keep any channel (tribute, recall) running.
-  3. Heal on spawn before leaving.
-  4. Lock an altar an enemy is tributing at, if we carry a lock.
-  5. Retreat when health is low: walk home while being hit (damage cancels recall),
-     recall once nothing is hitting us.
-  6. Hit back at an enemy champion hitting us, or attack a valuable enemy carrier,
-     but only with even or better numbers nearby.
-  7. Tribute when the bag is big, the altar is close or on the way, enemies are near,
-     or we are hurt.
-  8. Farm: pick a camp group, gather a squad if it needs one, kill it, capture it.
-
-Coordination: champions are numbered 0..n-1 by sorted engine handle. Shared memory
-byte k holds (group index + 1) for the group champion k is committed to, 0 for none.
-Groups one champion can solo get one champion; harder groups wait for a squad.
-Monolith groups are never targeted.
-
-Safety valves (each found in local testing):
-  - A target we stop getting closer to for 8 turns is dropped for 40 rounds
-    (no path, camps behind holes, or camps hidden in bushes).
-  - A capture still unclaimed after 8 rounds on the tile is contested: leave.
-  - Pathfinding is skipped when the turn's fuel is low, so a turn never overruns.
-  - The first turn only runs setup (the SDK charges ~20k fuel per call).
-"""
+# Shared memory byte k = champion k's target group idx + 1 (0 = none).
 import cambc as bc
 from cambc import game_map as gm
 
 ALLY, ENEMY = bc.Team.ALLY, bc.Team.ENEMY
 
-# ---------------------------------------------------------------- tunables
 DEBUG = True
-RETREAT_HP = 0.35       # step away and recall below this share of max health
-ENGAGE_HP = 0.6         # do not wake a new camp below this share of max health
-BIG_BAG = 50            # always go tribute once carrying this many gems
-NEAR_ALTAR = 2          # tribute any bag if an altar is this close
-DETOUR_OK = 10          # tribute if the altar costs at most this many extra steps
-GOLD_WEIGHT = 0.05      # a gold-only camp is worth this many gems per gold
-SAFE_SHARE = 0.5        # a fight is OK if expected damage per champion < this share of health
-MULTI_CAMP_FACTOR = 0.65  # camps in a group die one by one, so total damage is below full dps * time
-SQUAD_WAIT = 80         # rounds to wait for squad mates before giving up on a group
-BLACKLIST_ROUNDS = 60   # how long to ignore a group we gave up on
-CARRIER_GEMS = 15       # an enemy carrying at least this many gems is worth attacking
-CARRIER_HP = 0.5        # only chase carriers above this share of max health
-MOVE_FUEL_RESERVE = 1_300_000  # skip pathfinding when less fuel than this is left this turn
+RETREAT_HP = 0.35
+ENGAGE_HP = 0.6
+BIG_BAG = 50
+NEAR_ALTAR = 2
+DETOUR_OK = 10
+GOLD_WEIGHT = 0.05
+SAFE_SHARE = 0.5
+MULTI_CAMP_FACTOR = 0.65
+SQUAD_WAIT = 80
+BLACKLIST_ROUNDS = 60
+CARRIER_GEMS = 15
+CARRIER_HP = 0.5
+MOVE_FUEL_RESERVE = 1_300_000
 
 PICK_ORDER = [
     bc.ChampionDraft.RYTH, bc.ChampionDraft.VARG, bc.ChampionDraft.MARCELLA,
@@ -54,15 +27,13 @@ PICK_ORDER = [
 ]
 
 I = bc.ItemType
-# Shop builds: (shard, emblem) stages bought in order, five shards each.
-# Monster = +10% camp damage, Jungle = -30% camp damage, Treasure = +20% gold.
 BUILD_DEFAULT = [(I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
                  (I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
                  (I.POWER_SHARD_OF_STRENGTH, I.POWER_EMBLEM_OF_STRENGTH)]
 BUILD_TANKY_FIRST = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
                      (I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
                      (I.POWER_SHARD_OF_STRENGTH, I.POWER_EMBLEM_OF_STRENGTH)]
-BUILD_RYTH = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),   # health also adds strength
+BUILD_RYTH = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
               (I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
               (I.POWER_SHARD_OF_HEALTH, I.POWER_EMBLEM_OF_HEALTH)]
 BUILD_VESPER = [(I.TREASURE_SHARD_OF_STRENGTH, I.TREASURE_EMBLEM_OF_STRENGTH),
@@ -79,8 +50,7 @@ def log(msg):
     print(msg)
 
 
-def dbg(msg):
-    # debug_block costs no fuel locally and is skipped entirely on the platform
+def dbg(msg):  # free locally, skipped on platform
     if DEBUG:
         bc.debug_block(lambda: print(msg))
 
@@ -89,71 +59,65 @@ def dist(a, b):
     return a.chebyshev_distance(b)
 
 
-# ---------------------------------------------------------------- per-champion state
-
 class GroupInfo:
-    """Static facts about one camp group plus what this champion has seen of it."""
-
     def __init__(self, idx, group, avg_str, avg_hp, n_allies):
         camps = group.camps()
         self.idx = idx
         self.group = group
-        self.tiles = group.spawn_tiles()                 # Bitboard
+        self.tiles = group.spawn_tiles()
         tile_list = self.tiles.positions()
         self.center = tile_list[len(tile_list) // 2]
         self.gems = group.gem_value()
         self.gold = group.gold_value()
-        # Every SDK call costs fuel (~20k each), so read each camp's stats once.
-        stats = [c.base_stats() for c in camps]
+        stats = [c.base_stats() for c in camps]  # each SDK call ~20k fuel
         self.hp = sum(s.base_health for s in stats)
         self.dps = sum(s.base_strength for s in stats)
         factor = 1.0 if len(camps) == 1 else MULTI_CAMP_FACTOR
         self.need = squad_size(self.hp, self.dps * factor, avg_str, avg_hp, n_allies)
         self.in_bush = not (self.tiles & st.bushes).is_empty()
-        monolith = any(s.base_health >= 10000 for s in stats)  # monoliths have 20,000 HP
+        monolith = any(s.base_health >= 10000 for s in stats)  # 20k HP
         self.skip = monolith or (self.gems == 0 and self.gold == 0)
-        self.reach = None        # computed lazily by can_reach() to keep the first turn cheap
-        self.respawn_at = 0      # round we expect it back (0 = alive or unknown)
-        self.reward = False      # all camps dead, reward waiting to be captured
-        self.wait_since = None   # round we started waiting here for squad mates
-        self.capture_since = None  # round we stepped onto its spawn tile to capture
+        self.reach = None
+        self.respawn_at = 0
+        self.reward = False
+        self.wait_since = None
+        self.capture_since = None
 
 
 def squad_size(hp, dps, avg_str, avg_hp, n_allies):
-    """Smallest squad whose estimated damage per member stays under SAFE_SHARE of health."""
     for n in range(1, n_allies + 1):
         rounds = hp / (n * avg_str)
         if dps * rounds / n < SAFE_SHARE * avg_hp:
             return n
-    return 99  # too dangerous for the whole team
+    return 99
 
 
 class State:
     ready = False
-    walkable = None     # Bitboard: not wall, hole, altar or enemy spawn
-    spawn = None        # Bitboard: our spawn region
+    walkable = None
+    spawn = None
     spawn_list = []
     altars = []
     bushes = None
     max_dist = 10000
-    stuck = 0               # turns without getting closer to stuck_key's group
+    stuck = 0
     stuck_key = None
     stuck_best = 0
-    last_hp = 0.0           # our health at the start of last turn
-    hurt = False            # took damage since last turn
-    handles = []        # sorted ally handles; index = shared memory slot
+    last_hp = 0.0
+    hurt = False
+    handles = []
     slot = 0
     groups = []
-    by_handle = {}      # int(group) -> GroupInfo
-    target = None       # GroupInfo we are committed to
+    by_handle = {}
+    target = None
     mem = bytearray(8)
-    blacklist = {}      # group idx -> round until which we ignore it
+    blacklist = {}
     last_slot_value = -1
     alive_slots = []
     visible_allies = {}
-    ally_pos = {}           # handle -> position, visible allies, this turn
-    enemies = []            # (champion, position) for visible enemies, this turn
-    static_blocked = None   # Bitboard: walls, holes, altars, enemy spawn
+    ally_pos = {}
+    enemies = []
+    static_blocked = None
     was_alive = True
 
 
@@ -161,7 +125,6 @@ st = State()
 
 
 def init():
-    """One-off setup on the first gameplay turn (it gets double fuel)."""
     me = bc.me()
     st.static_blocked = gm.walls() | gm.holes() | gm.altars() | gm.spawn_region(ENEMY)
     st.walkable = ~st.static_blocked
@@ -169,7 +132,7 @@ def init():
     st.spawn_list = st.spawn.positions()
     st.altars = gm.altars().positions()
     st.bushes = gm.bushes()
-    st.max_dist = gm.width() * gm.height()  # the search's default cap is too short on big maps
+    st.max_dist = gm.width() * gm.height()  # default BFS cap too short on big maps
     allies = bc.champions(ALLY)
     st.handles = sorted(int(c) for c in allies)
     st.slot = st.handles.index(int(me))
@@ -186,8 +149,6 @@ def init():
         [(g.idx, g.gems, g.need) for g in st.groups if not g.skip]))
 
 
-# ---------------------------------------------------------------- shared memory
-
 def read_memory():
     buf = bytearray(8)
     bc.shared_memory.read(0, buf)
@@ -195,7 +156,6 @@ def read_memory():
 
 
 def commit(info):
-    """Publish which group we are working on (None = free)."""
     st.target = info
     value = 0 if info is None else info.idx + 1
     if value != st.last_slot_value:
@@ -204,7 +164,6 @@ def commit(info):
 
 
 def refresh_allies():
-    """Once per turn: which ally slots are alive, and the visible allies by handle."""
     alive = {int(c) for c in bc.champions(ALLY) if c.is_alive()}
     st.alive_slots = [k for k, h in enumerate(st.handles) if h in alive]
     st.visible_allies = {int(c): c for c in bc.vision.champions(ALLY)}
@@ -218,7 +177,6 @@ def refresh_allies():
 
 
 def committed_others(info):
-    """Slots of other living allies committed to this group."""
     want = info.idx + 1
     return [k for k in st.alive_slots if k != st.slot and k < 8 and st.mem[k] == want]
 
@@ -227,10 +185,7 @@ def alive_allies():
     return len(st.alive_slots)
 
 
-# ---------------------------------------------------------------- observation
-
 def observe(rnd):
-    """Update respawn / reward knowledge for every group with a spawn tile in vision."""
     for g in bc.vision.camp_groups():
         info = st.by_handle.get(int(g))
         if info is None:
@@ -251,7 +206,6 @@ def observe(rnd):
 
 
 def live_camps(info):
-    """Visible living camps of a group."""
     out = []
     for c in info.group.camps():
         try:
@@ -279,10 +233,7 @@ def count_near(points, center, radius):
     return sum(1 for p in points if dist(p, center) <= radius)
 
 
-# ---------------------------------------------------------------- movement
-
 def ring(center, rng, exclude=None):
-    """Bitboard of free walkable tiles within Chebyshev rng of center."""
     bb = bc.Bitboard()
     bb.draw_chebyshev(center, rng)
     bb &= st.walkable
@@ -293,18 +244,13 @@ def ring(center, rng, exclude=None):
 
 
 def walk_to(me, goals):
-    """One step along a shortest path to the nearest tile of the goals Bitboard.
-
-    One breadth-first search per call (DistanceField from all goals, stopping when it
-    reaches us). A step can return False when a hidden enemy in a bush blocks it; that
-    tile is then known, so we try the next best step. True if we moved."""
     if goals is None or not me.can_move():
         return False
-    if bc.fuel_remaining() < MOVE_FUEL_RESERVE:
-        return False  # a search with no path floods the whole map; never risk the turn
+    if bc.fuel_remaining() < MOVE_FUEL_RESERVE:  # no-path BFS floods the map
+        return False
     origin = me.position()
     if goals.is_set(origin):
-        return False  # already on a goal tile
+        return False
     blocked = st.static_blocked | bc.vision.champion_tiles() | bc.vision.camp_tiles()
     blocked.set(origin, False)
     roots = goals & ~blocked
@@ -321,7 +267,7 @@ def walk_to(me, goals):
         if field.get(p) >= here:
             break
         try:
-            if me.move_absolute(p):
+            if me.move_absolute(p):  # False = hidden enemy, try next step
                 return True
         except bc.Error as e:
             dbg("move error %r" % (e,))
@@ -332,10 +278,7 @@ def go_home(me):
     walk_to(me, st.spawn)
 
 
-# ---------------------------------------------------------------- shopping
-
 def shop(me):
-    """Buy the champion's build on spawn, while dead, or anywhere for Tavi (shards only)."""
     name = me.champion_name()
     on_spawn = (not me.is_alive()) or st.spawn.is_set(me.position())
     if not on_spawn and name != CT.TAVI:
@@ -353,17 +296,13 @@ def shop(me):
             me.buy(shard, n)
             gold -= n * shard.cost()
             dbg("bought %d x %s" % (n, shard.name))
-        break  # finish this stage before the next
-    # One altar lock once the first emblem is done (only purchasable on spawn / dead).
+        break
     if on_spawn and first_emblem_done and gold >= LOCK.cost():
         if me.consumables()[int(LOCK)].count() == 0 and me.can_buy(LOCK):
             me.buy(LOCK)
 
 
-# ---------------------------------------------------------------- safety
-
 def threats_near(me, radius=4):
-    """True if an awake camp or an enemy champion is within radius."""
     pos = me.position()
     for c in bc.vision.camps():
         try:
@@ -375,7 +314,6 @@ def threats_near(me, radius=4):
 
 
 def retreat(me):
-    """Low health: bank gems if an altar is adjacent, else get clear of threats and recall."""
     commit(None)
     pos = me.position()
     altar, d = nearest_altar(pos)
@@ -385,8 +323,7 @@ def retreat(me):
         return
     if st.spawn.is_set(pos):
         return
-    if st.hurt or threats_near(me):
-        # Damage cancels a recall, so walk home and hit back at whatever is in range.
+    if st.hurt or threats_near(me):  # damage cancels recall
         go_home(me)
         hit_back(me)
         return
@@ -394,11 +331,7 @@ def retreat(me):
     dbg("retreat: recall hp=%d" % me.health())
 
 
-# ---------------------------------------------------------------- enemy interaction
-
-def attack(me, target):
-    """Basic-attack, then use an attack-reset ability if ready and attack again
-    (Ryth, Varg, Vendetta, Marcella, Vesper, Tavi, Willow have one)."""
+def attack(me, target):  # attack reset = free second hit
     me.attack(target)
     if not me.can_cast():
         return
@@ -414,7 +347,6 @@ def attack(me, target):
 
 
 def hit_back(me):
-    """Basic-attack an enemy champion in range, else an awake camp in range."""
     if not me.can_attack():
         return False
     targets = in_range_of(me, enemies_visible())
@@ -426,16 +358,13 @@ def hit_back(me):
     return False
 
 
-def defend(me):
-    """Being hit with an enemy champion in range: always hit back. Platform games
-    showed running on foot just means dying without dealing damage."""
+def defend(me):  # fleeing on foot just dies (platform games)
     if not st.hurt or not in_range_of(me, enemies_visible()):
         return False
     return hit_back(me)
 
 
 def interfere_altar(me):
-    """Drop our altar lock on an altar an enemy is tributing at."""
     lock = me.consumables()[int(LOCK)]
     if lock.count() == 0:
         return False
@@ -459,7 +388,6 @@ def interfere_altar(me):
 
 
 def hunt_carrier(me):
-    """Attack a visible enemy carrying many gems (or tributing), only with even or better numbers."""
     if me.health() < CARRIER_HP * me.max_health() or not me.can_attack():
         return False
     pos = me.position()
@@ -496,8 +424,6 @@ def hunt_carrier(me):
     return True
 
 
-# ---------------------------------------------------------------- tribute
-
 def want_tribute(me, hp_frac):
     gems = me.gem_count()
     if gems == 0:
@@ -509,7 +435,7 @@ def want_tribute(me, hp_frac):
     if gems >= BIG_BAG or d_alt <= NEAR_ALTAR or hp_frac < ENGAGE_HP:
         return True
     if any(dist(pos, ep) <= 6 for _, ep in st.enemies):
-        return True  # bank before someone takes it
+        return True
     tgt = st.target if st.target is not None else pick_target(me, bc.round_number(), dry=True)
     if tgt is None:
         return True
@@ -528,15 +454,11 @@ def tribute(me):
         dbg("tribute %d gems" % me.gem_count())
 
 
-# ---------------------------------------------------------------- farming
-
 def can_reach(me, info):
-    """Is there a walkable tile within our attack range of the group? (Camps ringed by
-    holes can only be hit by ranged champions.) Cached after the first check."""
     if info.reach is None:
-        if bc.fuel_remaining() < 1_500_000:
-            return True  # not checked yet (checks are spread over turns); assume reachable
-        spots = bc.Bitboard()
+        if bc.fuel_remaining() < 1_500_000:  # spread checks over turns
+            return True
+        spots = bc.Bitboard()  # camps ringed by holes need range
         for t in info.tiles.positions():
             spots.draw_chebyshev(t, me.attack_range())
         spots &= st.walkable
@@ -554,13 +476,11 @@ def target_ok(info, rnd, pos, alive):
 
 
 def pick_target(me, rnd, dry=False):
-    """Keep the current target while it is valid, else choose the best value per round."""
     pos = me.position()
     alive = alive_allies()
     cur = st.target
     if cur is not None and target_ok(cur, rnd, pos, alive):
         others = committed_others(cur)
-        # A solo group belongs to the lowest slot committed to it.
         if cur.need > 1 or cur.reward or not any(k < st.slot for k in others):
             return cur
     best, best_score = None, 0.0
@@ -569,9 +489,9 @@ def pick_target(me, rnd, dry=False):
             continue
         others = len(committed_others(info))
         if info.need == 1 and others >= 1 and not info.reward:
-            continue  # separate camps: someone else has it
+            continue
         if info.need > 1 and others >= info.need:
-            continue  # squad already full
+            continue
         d = dist(pos, info.center)
         value = info.gems + GOLD_WEIGHT * info.gold
         if info.reward:
@@ -580,7 +500,7 @@ def pick_target(me, rnd, dry=False):
             n = info.need
             value /= n
             if 0 < others < n:
-                value *= 3.0  # fill squads that are already forming
+                value *= 3.0
             score = value / (d + info.hp / (n * max(1.0, me.strength())) + 5 + 10)
         if score > best_score:
             best, best_score = info, score
@@ -590,14 +510,12 @@ def pick_target(me, rnd, dry=False):
 
 
 def note_stuck(me, info, rnd):
-    """Called while approaching a target. If we have not got any closer for 8 turns
-    (no path, or bouncing between two tiles), the target is unreachable for now."""
     d = dist(me.position(), info.center)
     if st.stuck_key != info.idx or d < st.stuck_best:
         st.stuck_key, st.stuck_best, st.stuck = info.idx, d, 0
         return
     st.stuck += 1
-    if st.stuck > 8:
+    if st.stuck > 8:  # no progress in 8 turns: unreachable
         st.stuck_key = None
         give_up(info, rnd, 40)
 
@@ -610,19 +528,15 @@ def give_up(info, rnd, rounds=BLACKLIST_ROUNDS):
 
 
 def capture(me, info, rnd):
-    """All camps dead: the lowest committed slot stands on a spawn tile for 5 rounds."""
     others = committed_others(info)
     if any(k < st.slot for k in others):
-        # Someone else captures; leave and find more work.
         st.blacklist[info.idx] = rnd + 8
         commit(None)
         return
     if info.tiles.is_set(me.position()):
-        # Standing on it: wait out the 5-round timer. Still unclaimed after 8 rounds
-        # means an enemy is contesting the region, so go elsewhere for a while.
         if info.capture_since is None:
             info.capture_since = rnd
-        elif rnd - info.capture_since > 8:
+        elif rnd - info.capture_since > 8:  # contested
             info.capture_since = None
             give_up(info, rnd, 30)
         return
@@ -631,7 +545,6 @@ def capture(me, info, rnd):
 
 
 def in_range_of(me, units):
-    """Units still visible and within attack range (vision can change after a step)."""
     pos, rng, out = me.position(), me.attack_range(), []
     for u in units:
         try:
@@ -643,7 +556,6 @@ def in_range_of(me, units):
 
 
 def fight(me, live, info, rnd):
-    """Hit the weakest camp in range, moving into range first if needed."""
     in_range = in_range_of(me, live)
     if not in_range:
         pos = me.position()
@@ -656,7 +568,6 @@ def fight(me, live, info, rnd):
 
 
 def squad_here(info):
-    """Allies (including me) committed to this group and within 5 tiles of it."""
     count = 1
     for k in committed_others(info):
         p = st.ally_pos.get(st.handles[k])
@@ -675,11 +586,9 @@ def farm(me, rnd, hp_frac):
         return
     live = live_camps(info)
     if not live:
-        # Not in vision yet. Camps inside bushes are only visible from next to them,
-        # so walk right up (never onto its spawn tiles). Unseen when adjacent: skip a while.
         pos = me.position()
         goals = ring(info.center, 1, exclude=info.tiles)
-        if info.in_bush and not (goals & st.bushes).is_empty():
+        if info.in_bush and not (goals & st.bushes).is_empty():  # bush camps only visible from inside
             goals = goals & st.bushes
         if dist(pos, info.center) <= 1:
             give_up(info, rnd, 30)
@@ -705,7 +614,6 @@ def farm(me, rnd, hp_frac):
 
 
 def idle(me, rnd):
-    """Nothing worth doing: wait next to the group that comes back soonest."""
     pos = me.position()
     soon = [g for g in st.groups if not g.skip and g.need <= alive_allies()]
     if not soon:
@@ -713,8 +621,6 @@ def idle(me, rnd):
     g = min(soon, key=lambda g: (max(g.respawn_at - rnd, dist(pos, g.center)), g.idx))
     walk_to(me, ring(g.center, 3, exclude=g.tiles))
 
-
-# ---------------------------------------------------------------- entry points
 
 def draft_turn():
     picked = [int(c) for c in bc.draft.current_draft(ALLY)]
@@ -727,7 +633,7 @@ def draft_turn():
 def play_turn():
     if not st.ready:
         init()
-        return  # setup is expensive; acting on top of it can overrun the first-turn fuel
+        return  # turn 1 = setup only (fuel)
     me = bc.me()
     rnd = bc.round_number()
     shop(me)
@@ -739,7 +645,7 @@ def play_turn():
         return
     st.was_alive = True
     if me.is_submitting_gems() or me.is_recalling() or me.is_teleporting():
-        return  # mid channel
+        return
     read_memory()
     refresh_allies()
     observe(rnd)
@@ -755,7 +661,7 @@ def play_turn():
             me.gold_count(), None if st.target is None else st.target.idx))
     if st.spawn.is_set(me.position()) and hp_frac < 0.95:
         commit(None)
-        return  # spawn heals us at turn end
+        return
     if interfere_altar(me):
         return
     if hp_frac < RETREAT_HP:
