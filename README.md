@@ -9,6 +9,7 @@ Python bot for Cambridge Battlecode. Built and tested with `cambc` CLI **2.2.5**
 | `bots/sprint1/src/main.py` | Entry point: the turn loop. Every turn is wrapped in try/except, so a bug never crashes the bot; errors are printed as `turn error: ... at <line numbers>`. |
 | `bots/sprint1/src/bot.py` | All decisions: draft, shopping, retreat, tribute, enemy carriers, camp farming. Tunables are at the top. |
 | `bots/sprint2/` | **Current submission.** sprint1 plus attack-reset abilities (extra hit every 8 turns) and always hitting back when an enemy champion is hitting us. |
+| `bots/hunter/` | Test opponent only: sprint2 that drafts stunners (Ryth, Tavi, Marcella, Ren), casts stuns and damage spells on enemy champions and attacks any visible enemy. Tougher than the ganker: sprint2 wins 7/20 vs it (14/20 vs ganker). |
 | `bots/ganker/` | Test opponent only: sprint1 tuned to attack any visible enemy champion, ignoring numbers. Reproduces the platform losses (we were hunted down solo). |
 | `bots/inspect/` | Map inspector: prints camp groups, altars and an ASCII picture of a map. |
 | `maps/` | Local test maps (`.map26a`). |
