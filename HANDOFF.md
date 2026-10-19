@@ -4,7 +4,7 @@ Read this first in a new session, then `CLAUDE.md` (coding rules) and `README.md
 
 ## 1. Who / what / goals
 
-- Solo competitor, Python bot, team "Bird Business". Knows basic Python (ATBS, CS50P).
+- Solo competitor, Python bot, team "Drunkards Walk" (renamed from "Bird Business"; the repo name is unchanged). Knows basic Python (ATBS, CS50P).
 - **Goals set by the user:**
   - **Top 5 on the ladder.** At the last report the bot was 644 of 696 with a 37% win rate. Those platform games were still running an old frozen version (see §5).
   - **At least 19/20 against the official starter**, as a hard floor for the finished version.
@@ -38,7 +38,7 @@ Read this first in a new session, then `CLAUDE.md` (coding rules) and `README.md
 | Path | What |
 | --- | --- |
 | `bots/sprint2/` | **Current best and shippable** (commit `84f786e`). Submit this (`$CAMBC bundle sprint2 --output sprint2.zip`). |
-| `bots/sprint3/` | Experimental: sprint2 plus leader/follower group movement. The E1 ability changes were ported in this session; see §6 for results. |
+| `bots/sprint3/` | Experimental: sprint2 (with E1) plus leader/follower group movement. Worse than sprint2 (41/90 vs 61/90); keep it only for the adaptive-mode work. |
 | `bots/hunter/` | Test opponent: stun/damage spells on champions, attacks any visible enemy. The best stand-in for top teams. |
 | `bots/ganker/` | Test opponent: the old sprint1 tuned to attack any visible enemy. |
 | `bots/sprint1/` | Original Sprint 1 bot (history). |
@@ -88,7 +88,7 @@ The Sprint 1 bot (splitting up to farm camps) beat the starter but lost every pl
 | sprint2 `1b919f4` | 17/20 | 8/10 | 14/20 (351 deaths) | 9/10 | 7/20 (728 deaths) | 1/10 (380 deaths) | 56 |
 | sprint3 `5b426a0` (grouping) | 13/20 | 8/10 | 7/20 (446 deaths) | 8/10 | 5/20 (709 deaths) | 1/10 (228 deaths) | 42 |
 | **sprint2 `84f786e` (E1)** | 16/20 | 9/10 | 13/20 (333 deaths) | 10/10 | 6/20 (726 deaths) | 7/10 (290 deaths) | **61** |
-| sprint3 + E1 | see §8 (run in progress at handoff) | | | | | | |
+| sprint3 + E1 | 13/20 | 10/10 | 5/20 (386 deaths) | 6/10 | 6/20 (714 deaths) | 1/10 (259 deaths) | 41 |
 
 **Losses to the starter** (farming races, 0–1 deaths each):
 - 274fa, from both sides.
@@ -119,11 +119,7 @@ The external review's core thesis: **farm in small groups, concentrate quickly f
 
 ## 8. State at handoff
 
-- `bots/sprint3` has E1 ported (the same diff as `1b919f4..84f786e`; the only conflict was constants, resolved). A gate run was in progress; if `bots/sprint3` isn't committed yet, rerun:
-  ```sh
-  for opp in hunter ganker starter; do for md in maps maps-platform; do python3 scripts/suite.py sprint3 $opp --maps $md > /tmp/s3_${opp}_${md}.txt; done; done
-  ```
-  Then compare with the sprint2 `84f786e` row in §6, commit, and report.
+- `bots/sprint3` has E1 ported and is committed. It's still clearly worse than sprint2 (41/90 vs 61/90). Permanent grouping costs more than coordinated abilities win back, which supports the adaptive farm/contest/recover idea in §7 step 3. sprint2 at `84f786e` was sent to the user to upload.
 - After that: step 2 of §7 on sprint2 (and ported to sprint3), with checks:
   - **Check A:** against the starter, no worse than 16/20 local and 9/10 platform.
   - **Check B:** against the hunter and ganker, fewer deaths.

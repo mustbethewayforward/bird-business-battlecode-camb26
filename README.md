@@ -1,4 +1,4 @@
-# Bird Business: Cambridge Battlecode 2026 (cambc2026a)
+# Drunkards Walk: Cambridge Battlecode 2026 (cambc2026a)
 
 Python bot for Cambridge Battlecode. Built and tested with `cambc` CLI **2.2.5**.
 

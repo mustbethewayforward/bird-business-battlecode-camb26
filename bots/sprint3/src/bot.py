@@ -21,6 +21,7 @@ CARRIER_HP = 0.5
 MOVE_FUEL_RESERVE = 600_000  # BFS max ~0.5M (measured); 1.3M froze big maps
 GROUP_SPREAD = 4        # followers catch up beyond this distance from the leader
 HOLD_TURNS = 15         # ...for at most this many turns
+STUN_VALUE = 150        # a stun on an enemy champion is worth this much damage (untuned)
 
 PICK_ORDER = [
     bc.ChampionDraft.RYTH, bc.ChampionDraft.VARG, bc.ChampionDraft.MARCELLA,
@@ -346,6 +347,7 @@ def retreat(me):
     if st.spawn.is_set(pos):
         return
     if st.hurt or threats_near(me):  # damage cancels recall
+        shield(me)
         go_home(me)
         hit_back(me)
         return
@@ -353,8 +355,64 @@ def retreat(me):
     dbg("retreat: recall hp=%d" % me.health())
 
 
-def attack(me, target):  # attack reset = free second hit
-    me.attack(target)
+def stunned(u):
+    try:
+        return u.buffs().has_stun()
+    except bc.Error:
+        return False
+
+
+def best_spell(me, target):
+    """Ready damage/stun ability worth more than one basic attack on target, else None.
+    One cast per turn is shared by both slots, so this is chosen before any reset."""
+    if not me.can_cast():
+        return None
+    pos, tpos = me.position(), target.position()
+    vs_champ = isinstance(target, bc.Champion)
+    best, best_v, focus = None, me.strength(), None
+    for ab in me.abilities():
+        try:
+            info = ab.info()
+            if info is None or not ab.is_ready() or not (ab.is_damage() or ab.is_aoe_damage() or ab.is_cc()):
+                continue
+            ground = ab.can_target_ground() and not (ab.can_target_enemies() if vs_champ else ab.can_target_camps())
+            if not ground and not (ab.can_target_enemies() if vs_champ else ab.can_target_camps()):
+                continue
+            if dist(pos, tpos) > info.range:
+                continue
+            focus = me.focus() if focus is None else focus
+            hits = 1
+            if ab.is_aoe_damage():
+                pts = [ep for _, ep in st.enemies] if vs_champ else [c.position() for c in bc.vision.camps() if c.is_visible()]
+                hits = max(1, count_near(pts, tpos, int(info.radius)))
+            v = info.modifier * focus * hits
+            if (ab.is_cc() or (ab.is_aoe_damage() and info.duration > 0)) and not stunned(target):
+                v += STUN_VALUE if vs_champ else (target.strength() * hits if target.is_awake() else 0)
+            if v > best_v:
+                best, best_v = (ab, tpos if ground else target), v
+        except bc.Error:
+            continue
+    return best
+
+
+def cast(me, spell):
+    try:
+        if spell[0].use(spell[1]):
+            dbg("CAST %s slot%d" % (me.champion_name(), spell[0].slot()))
+            return True
+    except bc.Error as e:
+        dbg("cast error %r" % (e,))
+    return False
+
+
+def attack(me, target):
+    """Best ability for this target, then basic attack; reset only if no spell was worth more
+    (or the reset finishes the target)."""
+    spell = best_spell(me, target)
+    if spell is not None and not (target.health() <= 2 * me.strength() and reset_ready(me)):
+        cast(me, spell)
+    if me.can_attack() and in_range_of(me, [target]):
+        me.attack(target)
     if not me.can_cast():
         return
     for ab in me.abilities():
@@ -365,6 +423,30 @@ def attack(me, target):  # attack reset = free second hit
                 return
         except bc.Error as e:
             dbg("reset error %r" % (e,))
+            return
+
+
+def reset_ready(me):
+    return any(ab.is_attack_reset() and ab.is_ready() for ab in me.abilities())
+
+
+def precast(me, target):
+    """Before walking: spells that forbid walking must be cast first, from spell range."""
+    spell = best_spell(me, target)
+    if spell is not None:
+        cast(me, spell)
+
+
+def shield(me):
+    """Varg: shield when an enemy champion is hitting us (instead of a reset)."""
+    if not me.can_cast() or not st.hurt or not st.enemies:
+        return
+    for ab in me.abilities():
+        try:
+            if ab.is_shield() and ab.is_ready() and ab.use():
+                dbg("SHIELD")
+                return
+        except bc.Error:
             return
 
 
@@ -383,6 +465,7 @@ def hit_back(me):
 def defend(me):  # fleeing on foot just dies (platform games)
     if not st.hurt or not in_range_of(me, enemies_visible()):
         return False
+    shield(me)
     return hit_back(me)
 
 
@@ -439,6 +522,7 @@ def hunt_carrier(me):
         return False
     e, ep = best[1], best[2]
     if dist(pos, ep) > rng:
+        precast(me, e)
         walk_to(me, ring(ep, rng))
     if me.can_attack() and in_range_of(me, [e]):
         attack(me, e)
@@ -472,6 +556,7 @@ def tribute(me):
         walk_to(me, ring(altar, 1))
         d = dist(me.position(), altar)
     if d <= 1:
+        hit_back(me)  # free attacks before the channel starts
         me.submit_gems(altar)
         dbg("tribute %d gems" % me.gem_count())
 
@@ -586,7 +671,9 @@ def fight(me, live, info, rnd):
     if not in_range:
         pos = me.position()
         nearest = min(live, key=lambda c: dist(pos, c.position()))
-        walk_to(me, ring(nearest.position(), me.attack_range()))
+        npos = nearest.position()  # read before precast: a spell can kill it
+        precast(me, nearest)
+        walk_to(me, ring(npos, me.attack_range()))
         note_stuck(me, info, rnd)
         in_range = in_range_of(me, live)
     if in_range and me.can_attack():
@@ -766,9 +853,11 @@ def act(me, rnd, hp_frac):
     if st.spawn.is_set(me.position()) and hp_frac < 0.95:
         st.branch = "heal"
         commit(None)
+        hit_back(me)  # still use attacks/casts without leaving spawn
         return
     if interfere_altar(me):
         st.branch = "lock"
+        hit_back(me)
         return
     if hp_frac < RETREAT_HP:
         st.branch = "retreat"
