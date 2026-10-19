@@ -76,6 +76,15 @@ Read this first in a new session, then `CLAUDE.md` (coding rules) and `README.md
   - Rewards are split among allies on the region.
   - The starting team alternates each round, so an enemy can act twice between two of our turns.
 - **Platform errors:** `main.py` prints `turn error: ... at <line numbers>` in release builds. Match those line numbers against `git show <sha>:bots/sprint2/src/bot.py` to identify which version produced the logs.
+- **Monster targeting (measured with a probe bot on 7ac1d8eb, elk and wolf):**
+  - Each awake camp makes one attack per round, at full strength, on one champion. Damage is not shared across a squad.
+  - It hits the nearest champion within range 3 (Chebyshev), re-chosen every round. Who attacked it doesn't matter, and it doesn't stick to a target.
+  - Ties go to the earlier-drafted champion. HP and tile position don't decide it.
+  - Range is 3 for elk and wolf: hit at 1–3, never at 4. So spells with range 4 hit camps without retaliation.
+  - Not tested: whether camps also target enemy champions.
+  - The old squad estimate (damage ÷ squad size, × 0.65) has no basis. The bot still rarely dies to camps (11 deaths in ~2,000 clears) because retreating at 35% HP passes aggro to the next-nearest champion.
+- **Repeatability:** identical inputs give byte-identical replays and fuel logs, even with games running in parallel. Results from different sessions can differ (ganker: 12/20 here vs 13/20 earlier), so compare only against baselines measured in the same session.
+- **Map identity:** a platform summary's `mapHash` is the SHA-256 of the `.map26a` file. 7ac1d8eb, dd8a22f2, 73ea9d96, e0125da0, 274fa801 and 4abecba3 have all appeared on the platform.
 
 ## 5. History in one paragraph
 
@@ -125,3 +134,22 @@ The external review's core thesis: **farm in small groups, concentrate quickly f
   - **Check B:** against the hunter and ganker, fewer deaths.
   - **Check C:** in debug logs, elks get killed before gem clusters in mixed groups.
 - Ask the user for fresh platform summaries (`cambc matches summary <id> --json`) of the latest submission, plus match zips. New maps can be added with `scripts/extract_map.py`.
+
+**Next session's update: the plan was revised and the step-1 result recorded.**
+- **Revised sequence:**
+  0. Probe monster targeting (done; see §4).
+  1. Refresh `need` after purchases.
+  2. Kill ordering.
+  3. Replace the survival model, checking predicted damage against what the most-hit champion actually took.
+  4. Squad-wait cap with a team-wide, expiring abandonment cooldown.
+
+  Gates check for regressions rather than demanding improvement: an 18-game matched set after each commit, then the full protocol on the combined candidate.
+- **Same-session baseline (`84f786e`), 60/90:**
+  - Starter: 16/20 local, 9/10 platform.
+  - Ganker: 12/20 (314 deaths) local, 10/10 (85) platform.
+  - Hunter: 6/20 (726) local, 7/10 (290) platform.
+- **Step 1, refreshing `need` from own stats after each purchase plus an on-site safeguard: not committed.** Compared with the matched baseline:
+  - Previously excluded groups were cleared only 2 times.
+  - Overall clears +10% and gems banked +7%, but wins fell from 11 to 9.
+  - The refreshed estimate for excluded groups still needs the whole team, and teammates whose own estimate stays at 99 never join. **Champions must agree on one team-wide `need`** before refreshing helps.
+- **Platform summaries:** of the 10 sent, 8 were losses. Most were farming races rather than deaths. Helpers who do the fighting often earn 0 gold, because only the lowest-numbered squad member captures.
