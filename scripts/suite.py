@@ -1,6 +1,6 @@
 """Play a bot against an opponent on every map in maps/, from both sides, and summarise.
 
-    python scripts/suite.py [BOT] [OPPONENT] [--rounds N] [--debug] [--jobs J]
+    python scripts/suite.py [BOT] [OPPONENT] [--rounds N] [--debug] [--jobs J] [--maps DIR]
 
 Defaults: sprint1 vs starter, full games, release mode (as on the platform), 4 jobs.
 Create the opponent first if needed: `cambc new --lang python starter`.
@@ -77,11 +77,12 @@ def main():
     ap.add_argument("--rounds", type=int, default=0)
     ap.add_argument("--debug", action="store_true", help="debug build (debug_block output kept)")
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--maps", default="maps", help="folder of .map26a files")
     args = ap.parse_args()
 
-    maps = sorted(glob.glob(os.path.join(ROOT, "maps", "*.map26a")))
+    maps = sorted(glob.glob(os.path.join(ROOT, args.maps, "*.map26a")))
     if not maps:
-        sys.exit("no maps in maps/")
+        sys.exit("no maps in %s/" % args.maps)
     out_root = os.path.join(ROOT, "replays", "suite")
     shutil.rmtree(out_root, ignore_errors=True)
     games = []
