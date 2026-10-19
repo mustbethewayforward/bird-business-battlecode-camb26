@@ -108,7 +108,6 @@ class State:
     handles = []
     slot = 0
     groups = []
-    by_handle = {}
     target = None
     mem = bytearray(8)
     blacklist = {}
@@ -120,6 +119,10 @@ class State:
     static_blocked = None
     was_alive = True
     rng = 1
+    branch = ""
+    reach_budget = 0
+    fuelskip = 0
+    tel = None
 
 
 st = State()
@@ -145,7 +148,6 @@ def init():
     for i, g in enumerate(gm.camp_groups()):
         info = GroupInfo(i, g, avg_str, avg_hp, len(allies))
         st.groups.append(info)
-        st.by_handle[int(g)] = info
     st.ready = True
     dbg("init slot=%d %s groups=%s" % (st.slot, me.champion_name(),
         [(g.idx, g.gems, g.need) for g in st.groups if not g.skip]))
@@ -188,12 +190,12 @@ def alive_allies():
 
 
 def observe(rnd):
-    for g in bc.vision.camp_groups():
-        info = st.by_handle.get(int(g))
-        if info is None:
+    vis = bc.vision.visible_tiles()  # vision.camp_groups() rebuilds every group: ~1.1M fuel
+    for info in st.groups:
+        if (info.tiles & vis).is_empty():
             continue
         try:
-            s = g.state()
+            s = info.group.state()
         except bc.Error:
             continue
         if isinstance(s, gm.CampGroupRespawning):
@@ -249,6 +251,7 @@ def walk_to(me, goals):
     if goals is None or not me.can_move():
         return False
     if bc.fuel_remaining() < MOVE_FUEL_RESERVE:  # no-path BFS floods the map
+        st.fuelskip += 1
         return False
     origin = me.position()
     if goals.is_set(origin):
@@ -458,8 +461,9 @@ def tribute(me):
 
 def can_reach(me, info):
     if info.reach is None:
-        if bc.fuel_remaining() < 1_500_000:  # spread checks over turns
+        if st.reach_budget <= 0:  # fixed 2/turn: a fuel gate never fired on big maps
             return True
+        st.reach_budget -= 1
         spots = bc.Bitboard()  # camps ringed by holes need range
         for t in info.tiles.positions():
             spots.draw_chebyshev(t, st.rng)
@@ -526,6 +530,7 @@ def note_stuck(me, info, rnd):
 
 
 def give_up(info, rnd, rounds=BLACKLIST_ROUNDS):
+    st.branch += ":giveup%d" % info.idx
     st.blacklist[info.idx] = rnd + rounds
     info.wait_since = None
     commit(None)
@@ -584,13 +589,17 @@ def squad_here(info):
 def farm(me, rnd, hp_frac):
     info = pick_target(me, rnd)
     if info is None:
+        st.branch = "farm:idle"
         idle(me, rnd)
         return
+    st.branch = "farm:g%d" % info.idx
     if info.reward:
+        st.branch += ":capture"
         capture(me, info, rnd)
         return
     live = live_camps(info)
     if not live:
+        st.branch += ":approach"
         pos = me.position()
         goals = ring(info.center, 1, exclude=info.tiles)
         if info.in_bush and not (goals & st.bushes).is_empty():  # bush camps only visible from inside
@@ -604,9 +613,12 @@ def farm(me, rnd, hp_frac):
     awake = any(c.is_awake() for c in live)
     if not awake:
         if hp_frac < ENGAGE_HP:
+            st.branch += ":lowhp"
             retreat(me)
             return
-        if squad_here(info) < info.need:
+        here = squad_here(info)
+        if here < info.need:
+            st.branch += ":wait%d/%d" % (here, info.need)
             if info.wait_since is None:
                 info.wait_since = rnd
             if rnd - info.wait_since > SQUAD_WAIT:
@@ -615,6 +627,7 @@ def farm(me, rnd, hp_frac):
             walk_to(me, ring(info.center, 3, exclude=info.tiles))
             return
     info.wait_since = None
+    st.branch += ":fight"
     fight(me, live, info, rnd)
 
 
@@ -664,17 +677,49 @@ def play_turn():
         dbg("r%d s%d %s pos=%s hp=%d/%d gems=%d gold=%d tgt=%s" % (
             rnd, st.slot, me.champion_name(), me.position(), me.health(), me.max_health(), me.gem_count(),
             me.gold_count(), None if st.target is None else st.target.idx))
+    st.branch = ""
+    st.reach_budget = 2
+    bc.debug_block(lambda: tel_begin(me))
+    act(me, rnd, hp_frac)
+    bc.debug_block(lambda: tel_end(me, rnd))
+
+
+def tel_begin(me):  # debug only: snapshot to detect turns with no useful action
+    st.tel = st.tel or {"noop": {}, "turns": 0, "skip0": st.fuelskip}
+    st.tel["pos"], st.tel["atk"] = me.position(), me.can_attack()
+
+
+def tel_end(me, rnd):
+    t = st.tel
+    t["turns"] += 1
+    acted = (me.position() != t["pos"] or (t["atk"] and not me.can_attack())
+             or me.is_submitting_gems() or me.is_recalling())
+    if not acted:
+        key = st.branch.split(":giveup")[0] or "none"
+        t["noop"][key] = t["noop"].get(key, 0) + 1
+    if rnd % 100 == 0:
+        top = sorted(t["noop"].items(), key=lambda kv: -kv[1])[:6]
+        print("TEL r%d s%d turns=%d noop=%d fuelskip=%d top=%s" % (
+            rnd, st.slot, t["turns"], sum(t["noop"].values()), st.fuelskip, top))
+
+
+def act(me, rnd, hp_frac):
     if st.spawn.is_set(me.position()) and hp_frac < 0.95:
+        st.branch = "heal"
         commit(None)
         return
     if interfere_altar(me):
+        st.branch = "lock"
         return
     if hp_frac < RETREAT_HP:
+        st.branch = "retreat"
         retreat(me)
         return
+    st.branch = "champfight"
     if defend(me) or hunt_carrier(me):
         return
     if want_tribute(me, hp_frac):
+        st.branch = "tribute"
         tribute(me)
         return
     farm(me, rnd, hp_frac)
