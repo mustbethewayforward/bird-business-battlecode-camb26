@@ -441,7 +441,7 @@ def want_tribute(me, hp_frac):
         return True
     if any(dist(pos, ep) <= 6 for _, ep in st.enemies):
         return True
-    tgt = st.target if st.target is not None else pick_target(me, bc.round_number(), dry=True)
+    tgt = st.target  # no dry pick_target scan: ~1.2M fuel on 42-group maps
     if tgt is None:
         return True
     detour = d_alt + dist(altar, tgt.center) - dist(pos, tgt.center)
@@ -481,7 +481,7 @@ def target_ok(info, rnd, pos, alive):
     return info.respawn_at - rnd <= dist(pos, info.center)
 
 
-def pick_target(me, rnd, dry=False):
+def pick_target(me, rnd):
     pos = me.position()
     alive = alive_allies()
     cur = st.target
@@ -513,8 +513,7 @@ def pick_target(me, rnd, dry=False):
             score = value / (d + info.hp / (n * my_str) + 5 + 10)
         if score > best_score:
             best, best_score = info, score
-    if not dry:
-        commit(best)
+    commit(best)
     return best
 
 
