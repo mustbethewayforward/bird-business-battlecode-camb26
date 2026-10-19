@@ -71,6 +71,8 @@ class GroupInfo:
         self.gems = group.gem_value()
         self.gold = group.gold_value()
         stats = [c.base_stats() for c in camps]  # each SDK call ~20k fuel
+        for c, s in zip(camps, stats):
+            st.camp_str[c.kind()] = s.base_strength
         self.hp = sum(s.base_health for s in stats)
         self.dps = sum(s.base_strength for s in stats)
         factor = 1.0 if len(camps) == 1 else MULTI_CAMP_FACTOR
@@ -120,6 +122,8 @@ class State:
     static_blocked = None
     was_alive = True
     rng = 1
+    varg = False
+    camp_str = {}
     branch = ""
     reach_budget = 0
     fuelskip = 0
@@ -142,6 +146,7 @@ def init():
     st.handles = sorted(int(c) for c in allies)
     st.slot = st.handles.index(int(me))
     st.rng = me.attack_range()
+    st.varg = me.champion_name() == CT.VARG
     stats = [c.base_stats() for c in allies]
     avg_str = sum(s.base_strength for s in stats) / len(stats)
     avg_hp = sum(s.base_health for s in stats) / len(stats)
@@ -437,10 +442,12 @@ def hit_back(me):
     if not me.can_attack():
         return False
     targets = in_range_of(me, enemies_visible())
-    if not targets:
-        targets = [c for c in in_range_of(me, bc.vision.camps()) if c.is_awake()]
     if targets:
         attack(me, min(targets, key=lambda u: u.health()))
+        return True
+    camps = [c for c in in_range_of(me, bc.vision.camps()) if c.is_awake()]
+    if camps:
+        attack(me, best_camp(camps, camps))
         return True
     return False
 
@@ -649,18 +656,35 @@ def in_range_of(me, units):
     return out
 
 
+def best_camp(cands, live):
+    """Kill order: most camp damage removed per turn of killing time (strength / health left).
+    Varg first maximises splash: other live camps within 1 tile of the target."""
+    def key(c):
+        threat = st.camp_str[c.kind()] / max(1.0, c.health())
+        if not st.varg:
+            return threat
+        p = c.spawn_position()  # camps never leave their tile
+        return sum(1 for o in live if o != c and dist(o.spawn_position(), p) <= 1), threat
+    return max(cands, key=key)
+
+
 def fight(me, live, info, rnd):
     in_range = in_range_of(me, live)
     if not in_range:
         pos = me.position()
-        nearest = min(live, key=lambda c: dist(pos, c.position()))
-        npos = nearest.position()  # read before precast: a spell can kill it
-        precast(me, nearest)
-        walk_to(me, ring(npos, me.attack_range()))
+        goal = min(live, key=lambda c: dist(pos, c.position())) if st.enemies else best_camp(live, live)
+        gpos = goal.position()  # read before precast: a spell can kill it
+        precast(me, goal)
+        walk_to(me, ring(gpos, me.attack_range()))
         note_stuck(me, info, rnd)
         in_range = in_range_of(me, live)
+    elif st.rng == 1 and not st.enemies and not any(st.camp_str[c.kind()] for c in in_range):
+        goal = best_camp(live, live)  # only harmless camps in reach: melee steps keep the attack
+        if st.camp_str[goal.kind()] and goal not in in_range:
+            walk_to(me, ring(goal.position(), 1))
+            in_range = in_range_of(me, live)
     if in_range and me.can_attack():
-        attack(me, min(in_range, key=lambda c: c.health()))
+        attack(me, best_camp(in_range, live))
 
 
 def squad_here(info):
