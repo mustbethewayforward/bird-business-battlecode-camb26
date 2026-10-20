@@ -1,8 +1,6 @@
 # Experimental (not shipped): exp-demand (solo feasibility from own stats) + exp-assembly (squad election).
 # Shared memory byte k = champion k's target group idx + 1 (0 = none).
 # Bytes 6-7 = (group idx + 1, expiry round // 8) of the last failed squad assembly.
-import math
-
 import cambc as bc
 from cambc import game_map as gm
 
@@ -51,6 +49,9 @@ BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER,
           CT.STELLAR: BUILD_TANKY_FIRST, CT.PRISM: BUILD_TANKY_FIRST, CT.WILLOW: BUILD_TANKY_FIRST,
           CT.CASSI: BUILD_TANKY_FIRST, CT.TAVI: BUILD_TANKY_FIRST}
 LOCK = bc.ConsumableType.ALTAR_LOCK
+COOLDOWN = 8             # ability cooldown in turn ends
+# kit_of() for our usual picks, measured once (each SDK flag read costs ~20k of first-turn fuel)
+KITS = {CT.RYTH: (0, 1), CT.VARG: (None, 0), CT.MARCELLA: (1, 0), CT.VENDETTA: (None, 0), CT.REN: (0, None)}
 MONSTER_EMBLEMS = (I.MONSTER_EMBLEM_OF_STRENGTH, I.MONSTER_EMBLEM_OF_HEALTH, I.MONSTER_EMBLEM_OF_FOCUS)
 JUNGLE_EMBLEMS = (I.JUNGLE_EMBLEM_OF_STRENGTH, I.JUNGLE_EMBLEM_OF_HEALTH, I.JUNGLE_EMBLEM_OF_FOCUS)
 
@@ -86,9 +87,9 @@ class GroupInfo:
         factor = 1.0 if len(camps) == 1 else MULTI_CAMP_FACTOR
         self.need0 = squad_size(self.hp, self.dps * factor, avg_str, avg_hp, n_allies)
         self.camps = sorted(((s.base_health, s.base_strength) for s in stats), key=lambda c: -c[1] / c[0])
-        if solo_ok(self.camps, my.base_strength, my.base_health):
+        if solo_ok(self.camps, *my):
             self.need = 1
-        elif any(solo_ok(self.camps, a.base_strength, a.base_health) for a in team):
+        elif any(solo_ok(self.camps, *a) for a in team):
             self.need = 99  # solo work for a teammate: no squad request for it
         else:
             self.need = max(2, self.need0)
@@ -101,18 +102,46 @@ class GroupInfo:
         self.capture_since = None
 
 
-def solo_damage(camps, atk, taken=1.0):
-    """Damage to a lone champion (camps hit the nearest champion: all of it lands on me),
-    killing (health, strength) camps in order with whole attacks of atk each."""
-    t = dmg = 0
+def kit_of(champ):
+    """(slot of a SPELL attack() casts at camps, slot of an attack RESET), None if absent.
+    A spell takes the turn's one cast (its damage is not credited); a reset gives a second attack."""
+    spell = reset = None
+    for ab in champ.abilities():
+        if ab.is_attack_reset():
+            reset = ab.slot()
+        elif (ab.is_damage() or ab.is_aoe_damage() or ab.is_cc()) and (ab.can_target_camps() or ab.can_target_ground()):
+            spell = ab.slot()
+    return spell, reset
+
+
+def solo_damage(camps, atk, kit, taken=1.0, cooldowns=(0, 0), limit=1e9):
+    """Damage to a lone champion (camps hit the nearest champion: all of it lands on me), killing
+    (health, strength) camps in order. Each turn: one attack of atk, then one cast: a ready spell
+    first, else a ready reset, whose extra attack only hits a camp still alive; 8-turn cooldowns.
+    Stops once past limit."""
+    spell_cd = cooldowns[0] if kit[0] is not None else 99999
+    reset_cd = cooldowns[1] if kit[1] is not None else 99999
+    alive = sum(s for _, s in camps)
+    dmg = 0.0
     for hp, strength in camps:
-        t += math.ceil(hp / atk)
-        dmg += strength * t * taken
+        while hp > 0:
+            dmg += alive * taken  # every live camp hits me once a round
+            if dmg > limit:
+                return dmg
+            hp -= atk
+            if spell_cd == 0:
+                spell_cd = COOLDOWN
+            elif reset_cd == 0:
+                reset_cd = COOLDOWN
+                if hp > 0:
+                    hp -= atk
+            spell_cd, reset_cd = max(0, spell_cd - 1), max(0, reset_cd - 1)
+        alive -= strength
     return dmg
 
 
-def solo_ok(camps, atk, max_hp, taken=1.0):
-    return solo_damage(camps, atk, taken) < SAFE_SHARE * max_hp
+def solo_ok(camps, atk, max_hp, kit, taken=1.0):
+    return solo_damage(camps, atk, kit, taken, limit=SAFE_SHARE * max_hp) < SAFE_SHARE * max_hp
 
 
 def refresh_solo(me):
@@ -124,7 +153,7 @@ def refresh_solo(me):
     max_hp = me.max_health()
     changed = []
     for info in st.groups:
-        if info.need != 1 and solo_ok(info.camps, st.atk, max_hp, st.taken):
+        if info.need != 1 and solo_ok(info.camps, st.atk, max_hp, st.kit, st.taken):
             changed.append((info.idx, info.need))
             info.need = 1
     if changed:
@@ -169,6 +198,7 @@ class State:
     rng = 1
     atk = 1.0
     taken = 1.0
+    kit = (None, None)
     solo_fight = None       # debug: (group idx, round, hp, predicted) of my current solo engagement
     varg = False
     camp_str = {}
@@ -198,12 +228,15 @@ def init():
     stats = [c.base_stats() for c in allies]
     avg_str = sum(s.base_strength for s in stats) / len(stats)
     avg_hp = sum(s.base_health for s in stats) / len(stats)
-    st.groups = []
+    st.kit = kit_of(me)
+    team = [(s.base_strength, s.base_health, KITS.get(c.champion_name()) or kit_of(c)) for c, s in zip(allies, stats)]
     mine = me.base_stats()
+    mine = (mine.base_strength, mine.base_health, st.kit)
+    st.groups = []
     for i, g in enumerate(gm.camp_groups()):
-        info = GroupInfo(i, g, avg_str, avg_hp, len(allies), mine, stats)
+        info = GroupInfo(i, g, avg_str, avg_hp, len(allies), mine, team)
         st.groups.append(info)
-    st.atk = me.base_stats().base_strength
+    st.atk = mine[0]
     st.ready = True
     dbg("init slot=%d %s groups=%s" % (st.slot, me.champion_name(),
         [(g.idx, g.gems, g.need0, g.need) for g in st.groups if not g.skip]))
@@ -845,8 +878,15 @@ def farm(me, rnd, hp_frac):
             return
         if info.need == 1:  # solo: the predicted fight must end above the retreat line
             left = sorted(((c.health(), st.camp_str[c.kind()]) for c in live), key=lambda c: -c[1] / c[0])
-            pred, hp = solo_damage(left, st.atk, st.taken), me.health()
-            if pred > hp - RETREAT_HP * me.max_health():
+            hp, spare = me.health(), me.health() - RETREAT_HP * me.max_health()
+            abs_ = me.abilities()
+            cds = tuple(0 if k is None else abs_[k].cooldown() for k in st.kit)
+            pred = solo_damage(left, st.atk, st.kit, st.taken, cds)
+            if pred > spare:
+                if solo_damage(left, st.atk, st.kit, st.taken) <= spare:  # only a cooldown short
+                    st.branch += ":cooldown"
+                    walk_to(me, ring(info.center, 3, exclude=info.tiles))
+                    return
                 st.branch += ":unready"
                 dbg("SOLO-UNREADY r%d s%d g%d predicted=%.0f hp=%.0f" % (rnd, st.slot, info.idx, pred, hp))
                 retreat(me)
