@@ -457,7 +457,7 @@ def retreat(me):
     commit(None)
     pos = me.position()
     altar, d = nearest_altar(pos)
-    if me.gem_count() > 0 and altar is not None and d <= 1:
+    if me.gem_count() > 0 and altar is not None and d <= 1 and not enemy_lock(altar):
         me.submit_gems(altar)
         dbg("retreat: tribute at altar")
         return
@@ -668,6 +668,10 @@ def want_tribute(me, hp_frac):
     return detour <= DETOUR_OK
 
 
+def enemy_lock(altar):
+    return bc.vision.has_altar_lock(altar) and bc.vision.altar_lock_at(altar).is_enemy()
+
+
 def tribute(me):
     commit(None)
     altar, d = nearest_altar(me.position())
@@ -675,6 +679,10 @@ def tribute(me):
         walk_to(me, ring(altar, 1))
         d = dist(me.position(), altar)
     if d <= 1:
+        if enemy_lock(altar):  # tributing becomes an attack on the lock (5 hits): keep the attack for it
+            if me.can_attack():
+                me.submit_gems(altar)
+            return
         hit_back(me)  # free attacks before the channel starts
         me.submit_gems(altar)
         dbg("tribute %d gems" % me.gem_count())
