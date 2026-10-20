@@ -41,7 +41,8 @@ def play(bot_a, bot_b, our_team, map_path, rounds, debug, out_root):
     out_dir = os.path.join(out_root, "%s-%s" % (name, our_team[-1]))
     stats_path = out_dir + ".json"
     cmd = [CAMBC, "run", bot_a, bot_b, "--map", map_path, "-o", out_dir,
-           "--statistics", stats_path, "--json"]
+           "--statistics", stats_path, "--json",
+           "--log-limit", "50000000"]  # 3.0.1 runner fails some games at the default limit
     if rounds:
         cmd += ["--rounds", str(rounds)]
     if not debug:
