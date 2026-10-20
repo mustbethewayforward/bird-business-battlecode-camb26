@@ -21,17 +21,18 @@ Read this first in a new session, then `CLAUDE.md` (coding rules) and `README.md
 - **Repo:** `mustbethewayforward/bird-business-battlecode-camb26`. Branch `claude/battlecode-sprint-1-bot-6uc0vg`; it's the only branch and has no main. Clone to `/home/user/bird-business-battlecode-camb26`.
 - **Commit identity:** `git -c user.name="mustbethewayforward" -c user.email="mlgprowingzinnit@gmail.com" commit ...`. End commit messages with the session attribution lines from the system prompt.
 - **Do not use the other repo** (`cyo-mcq-tester`), which is the user's MCQ app.
-- **cambc CLI 2.2.5** (PyPI; a single binary inside the wheel; it isn't on the PATH by default):
+- **cambc CLI 3.0.1** (the 3.0 balance patch; 2.2.5 results are not comparable). It's on PyPI as a single binary inside the wheel and isn't on the PATH by default:
   ```sh
-  pip download cambc==2.2.5 --no-deps -d /tmp/cambc_pkg
-  mkdir -p ~/cambc && cd ~/cambc && python3 -c "import zipfile;zipfile.ZipFile(next(__import__('glob').iglob('/tmp/cambc_pkg/*.whl'))).extract('cambc-2.2.5.data/scripts/cambc','.')"
-  chmod +x ~/cambc/cambc-2.2.5.data/scripts/cambc
-  export CAMBC=~/cambc/cambc-2.2.5.data/scripts/cambc
+  pip download cambc==3.0.1 --no-deps -d /tmp/cambc_pkg
+  mkdir -p ~/cambc3 && cd ~/cambc3 && python3 -c "import zipfile;zipfile.ZipFile(next(__import__('glob').iglob('/tmp/cambc_pkg/*.whl'))).extract('cambc-3.0.1.data/scripts/cambc','.')"
+  chmod +x ~/cambc3/cambc-3.0.1.data/scripts/cambc
+  export CAMBC=~/cambc3/cambc-3.0.1.data/scripts/cambc
   cd /home/user/bird-business-battlecode-camb26
   $CAMBC init --yes .                 # restores sdk/ and cmake/ (gitignored). The wasi-sdk download error only affects C++; ignore it
   $CAMBC new --lang python starter    # official starter bot (gitignored), our baseline opponent
   ```
   The CLI tries to reach `2026a.battlecode.co.uk`, which the proxy blocks. That's harmless. Login, submit and match downloads must be done by the user.
+  `cambc maps pull` (the 3.0 map pool) is blocked too: the user has to pull the maps and commit them.
 
 ## 3. Layout (what matters)
 

@@ -7,6 +7,7 @@ bots/*/build/
 bots/*/target/
 bots/starter/
 bots/starter-cpp/
+bots/starter-*/
 matches/
 replays/
 __pycache__/

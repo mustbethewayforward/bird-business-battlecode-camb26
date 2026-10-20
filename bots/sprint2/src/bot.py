@@ -45,6 +45,7 @@ BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER,
           CT.STELLAR: BUILD_TANKY_FIRST, CT.PRISM: BUILD_TANKY_FIRST, CT.WILLOW: BUILD_TANKY_FIRST,
           CT.CASSI: BUILD_TANKY_FIRST, CT.TAVI: BUILD_TANKY_FIRST}
 LOCK = bc.ConsumableType.ALTAR_LOCK
+MODELLED_CAMPS = (bc.CampType.WOLF, bc.CampType.ELK, bc.CampType.GEM_CLUSTER, bc.CampType.GOLD_CLUSTER)
 
 
 def log(msg):
@@ -78,8 +79,8 @@ class GroupInfo:
         factor = 1.0 if len(camps) == 1 else MULTI_CAMP_FACTOR
         self.need = squad_size(self.hp, self.dps * factor, avg_str, avg_hp, n_allies)
         self.in_bush = not (self.tiles & st.bushes).is_empty()
-        monolith = any(s.base_health >= 10000 for s in stats)  # 20k HP
-        self.skip = monolith or (self.gems == 0 and self.gold == 0)
+        unmodelled = any(c.kind() not in MODELLED_CAMPS for c in camps)  # monolith, golem (3.0.1), anything newer
+        self.skip = unmodelled or (self.gems == 0 and self.gold == 0)
         self.reach = None
         self.respawn_at = 0
         self.reward = False

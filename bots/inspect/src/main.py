@@ -8,13 +8,13 @@ team-a.stdout in the replay zip (scripts/logs.py does that):
     cambc run inspect inspect --map <map> --rounds 1
     python scripts/logs.py replays
 
-Picture key: G gem cluster, D gold cluster, w wolf, E elk, M monolith, A altar,
+Picture key: G gem cluster, D gold cluster, w wolf, E elk, M monolith, L golem, A altar,
 # wall, o hole, " bush, 1 our spawn, 2 enemy spawn.
 """
 import cambc as bc
 from cambc import game_map as gm
 
-KIND_CHAR = {0: "w", 1: "E", 2: "G", 3: "D", 4: "M"}  # CampType values
+KIND_CHAR = {0: "w", 1: "E", 2: "G", 3: "D", 4: "M", 5: "L"}  # CampType values (5 = golem, 3.0.1)
 
 
 def dump():
