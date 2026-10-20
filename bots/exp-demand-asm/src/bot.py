@@ -1,6 +1,5 @@
 # Experimental (not shipped): exp-demand (solo feasibility from own stats) + exp-assembly (squad election).
 # Shared memory byte k = champion k's target group idx + 1 (0 = none).
-# Bytes 6-7 = (group idx + 1, expiry round // 8) of the last failed squad assembly.
 import cambc as bc
 from cambc import game_map as gm
 
@@ -15,9 +14,7 @@ DETOUR_OK = 10
 GOLD_WEIGHT = 0.05
 SAFE_SHARE = 0.5
 MULTI_CAMP_FACTOR = 0.65
-SQUAD_WAIT = 20         # rounds with no new commitment or arrival before an assembly fails
-WAIT_CAP = 60           # ...or total rounds waiting (a death's respawn time); never restarted
-TEAM_COOLDOWN = 40      # rounds nobody newly picks a group whose assembly failed
+SQUAD_WAIT = 80
 BLACKLIST_ROUNDS = 60
 CARRIER_GEMS = 15
 CARRIER_HP = 0.5
@@ -188,7 +185,7 @@ class State:
     mem = bytearray(8)
     blacklist = {}
     last_slot_value = -1
-    wait = None             # [group idx, since, best (committed, here), round it last rose, last round waited]
+    wait = None             # [group idx, since, last round waited]
     alive_slots = []
     visible_allies = {}
     ally_pos = {}
@@ -312,23 +309,17 @@ def reassign(info, rnd):
     return True
 
 
-def assembly_failed(info, here, rnd):
-    committed = 1 + len(committed_others(info))
+def wait_expired(info, here, rnd):
     w = st.wait
-    if w is None or w[0] != info.idx or w[4] < rnd - 1:  # any turn not waiting ends the wait
-        w = st.wait = [info.idx, rnd, (committed, here), rnd, rnd]
-        dbg("ASM r%d s%d wait g%d need=%d committed=%d here=%d" % (rnd, st.slot, info.idx, info.need, committed, here))
-    w[4] = rnd
-    if committed > w[2][0] or here > w[2][1]:  # support is getting closer
-        w[2], w[3] = (max(committed, w[2][0]), max(here, w[2][1])), rnd
-    if rnd - w[3] > SQUAD_WAIT:
-        why = "no progress, committed %d here %d of %d" % (committed, here, info.need)
-    elif rnd - w[1] > WAIT_CAP:
-        why = "cap, committed %d here %d of %d" % (committed, here, info.need)
-    else:
-        return False
-    dbg("ASM r%d s%d fail g%d after %d: %s" % (rnd, st.slot, info.idx, rnd - w[1], why))
-    return True
+    if w is None or w[0] != info.idx or w[2] < rnd - 1:  # any turn not waiting ends the wait
+        w = st.wait = [info.idx, rnd, rnd]
+        dbg("ASM r%d s%d wait g%d need=%d committed=%d here=%d" % (
+            rnd, st.slot, info.idx, info.need, 1 + len(committed_others(info)), here))
+    w[2] = rnd
+    if rnd - w[1] > SQUAD_WAIT:
+        dbg("ASM r%d s%d fail g%d after %d: here %d of %d" % (rnd, st.slot, info.idx, rnd - w[1], here, info.need))
+        return True
+    return False
 
 
 def observe(rnd):
@@ -726,8 +717,6 @@ def pick_target(me, rnd):
             break
         if not target_ok(info, rnd, pos, alive):
             continue
-        if st.mem[6] == info.idx + 1 and rnd < 8 * st.mem[7]:  # its assembly just failed
-            continue
         others = len(committed_others(info))
         if info.need == 1 and others >= 1 and not info.reward:
             continue
@@ -762,11 +751,9 @@ def note_stuck(me, info, rnd):
         give_up(info, rnd, 40)
 
 
-def give_up(info, rnd, rounds=BLACKLIST_ROUNDS, team=False):
+def give_up(info, rnd, rounds=BLACKLIST_ROUNDS):
     st.branch += ":giveup%d" % info.idx
     st.blacklist[info.idx] = rnd + rounds
-    if team:  # failed assembly: nobody newly picks it for a while
-        bc.shared_memory.write(6, bytes([info.idx + 1, min(255, (rnd + TEAM_COOLDOWN) // 8)]))
     commit(None)
     dbg("give up on group %d" % info.idx)
 
@@ -895,12 +882,12 @@ def farm(me, rnd, hp_frac):
         here = squad_here(info)
         if here < info.need:
             st.branch += ":wait%d/%d" % (here, info.need)
-            if assembly_failed(info, here, rnd):
-                give_up(info, rnd, team=True)
+            if wait_expired(info, here, rnd):
+                give_up(info, rnd)
                 return
             walk_to(me, ring(info.center, 3, exclude=info.tiles))
             return
-    if st.wait is not None and st.wait[0] == info.idx and st.wait[4] == rnd - 1:
+    if st.wait is not None and st.wait[0] == info.idx and st.wait[2] == rnd - 1:
         dbg("ASM r%d s%d fight g%d after %d here=%d" % (rnd, st.slot, info.idx, rnd - st.wait[1], squad_here(info)))
     st.branch += ":fight"
     fight(me, live, info, rnd)
