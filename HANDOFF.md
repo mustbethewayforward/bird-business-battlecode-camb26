@@ -1,20 +1,26 @@
 # Handoff: Cambridge Battlecode 2026 (cambc2026a) bot
 
-Read this first in a new session, then `CLAUDE.md` (coding rules) and `README.md` (layout).
+Read this first in a new session, then `CLAUDE.md` (coding rules) and `README.md` (older layout notes; this file wins where they differ).
 
 ## 1. Who / what / goals
 
-- Solo competitor, Python bot, team "Drunkards Walk" (renamed from "Bird Business"; the repo name is unchanged). Knows basic Python (ATBS, CS50P).
+- Solo competitor, Python bot, team "Drunkards Walk" (the repo name is unchanged). Knows basic Python (ATBS, CS50P).
 - **Goals set by the user:**
-  - **Top 5 on the ladder.** At the last report the bot was 644 of 696 with a 37% win rate. Those platform games were still running an old frozen version (see §5).
+  - **Top 5 on the ladder.**
   - **At least 19/20 against the official starter**, as a hard floor for the finished version.
-  - **Farming speed may be traded for safety.**
+  - **Farming speed may be traded for safety**, but survival bought by abandoning objectives is not an improvement.
 - **Working style the user wants:**
   - Be direct and concise; call out flawed reasoning; no sugar-coating; explain jargon in brackets.
   - Follow `CLAUDE.md`: state assumptions; give each step a plan with a `→ verify:` check; make surgical changes; remove orphans you create.
-  - **After each step:** release suites, commit, then a short report. Ask before the next step. The user replies "go".
-  - **When a verify check fails, say so plainly.** Keep the change only with reasons, and give the `git revert <sha>`.
+  - **Before coding a new step,** give the plan and wait for "go". **After each step,** report results.
+  - **When a check fails, say so plainly.** Keep a change only with reasons, and give the `git revert <sha>`.
+  - **Experiments go in their own `bots/exp-*` folders**, one fix per commit. `bots/sprint2` is the submission and only changes on promotion.
+  - **Evidence rules:**
+    - Compare only against a control measured on the same engine version in the same setup.
+    - First run focused cases to confirm the mechanism, then the full protocol to decide promotion.
+    - Report paired win/loss changes, gems banked and lost, deaths and fuel caps.
   - Never put model names in commits.
+  - The user often relays an external reviewer's critique. Treat it as instructions, but push back with data when it's wrong.
 
 ## 2. Repo and environment
 
@@ -31,126 +37,140 @@ Read this first in a new session, then `CLAUDE.md` (coding rules) and `README.md
   $CAMBC init --yes .                 # restores sdk/ and cmake/ (gitignored). The wasi-sdk download error only affects C++; ignore it
   $CAMBC new --lang python starter    # official starter bot (gitignored), our baseline opponent
   ```
-  The CLI tries to reach `2026a.battlecode.co.uk`, which the proxy blocks. That's harmless. Login, submit and match downloads must be done by the user.
-  `cambc maps pull` (the 3.0 map pool) is blocked too: the user has to pull the maps and commit them.
+  - Check PyPI (`pip index versions cambc`) at the start of a session. New patch versions have changed balance twice.
+  - The CLI tries to reach `2026a.battlecode.co.uk`, which the proxy blocks. That's harmless, but login, submit, `cambc maps pull` and match downloads must be done by the user.
+- **The container restarts without warning and kills background jobs** (it happened twice in one session). Run long batches with `nohup` and `scripts/games.py`, which skips games that already have results. Anything outside the repo (scratch folders) can be lost, so commit results worth keeping under `results/`.
+- **4 CPU cores.** A 70-game suite on `maps3` takes about 45 minutes at 4 jobs. The full 210-game protocol takes about 2.5–3 hours, or twice that when two bots share the cores.
 
 ## 3. Layout (what matters)
 
 | Path | What |
 | --- | --- |
-| `bots/sprint2/` | **Current best and shippable** (commit `84f786e`). Submit this (`$CAMBC bundle sprint2 --output sprint2.zip`). |
-| `bots/sprint3/` | Experimental: sprint2 (with E1) plus leader/follower group movement. Worse than sprint2 (41/90 vs 61/90); keep it only for the adaptive-mode work. |
-| `bots/hunter/` | Test opponent: stun/damage spells on champions, attacks any visible enemy. The best stand-in for top teams. |
-| `bots/ganker/` | Test opponent: the old sprint1 tuned to attack any visible enemy. |
-| `bots/sprint1/` | Original Sprint 1 bot (history). |
-| `bots/inspect/` | Map dumper (`$CAMBC run inspect inspect --map M --rounds 1; python scripts/logs.py replays`). |
-| `maps/` (10), `maps-platform/` (5) | Local maps, plus maps recovered from platform replays. |
-| `scripts/suite.py` | `python scripts/suite.py BOT OPP [--maps maps-platform] [--debug] [--rounds N]`: all maps, both sides. Prints win/loss, k/d, errors and fuel. Needs `CAMBC` set. |
-| `scripts/logs.py` | Prints team stdout from a replay. |
-| `scripts/report.py`, `scripts/platform_summary.py` | Analyse platform match JSONs (`cambc matches summary <id> --json`) and suite stats JSONs. Our team is identified by our draft order. |
-| `scripts/extract_map.py` | Recovers the map from a platform match zip or replay. Validate the result with an inspect run. |
+| `bots/sprint2/` | **Submission / control.** Last changed at `a0ed551`: E1 abilities, kill ordering (`5789ee4`), unknown-camp guard (`0f2362e`), altar-lock fix (`a0ed551`). |
+| `bots/exp-combat/` | **Lead candidate** (`9aa3ef4`): sprint2 plus disengaging from losing champion fights (§7). Full 3.0.4 evaluation not finished. |
+| `bots/exp-demand-asm/` | 2.2.5-era experiment: solo feasibility from each champion's own stats, with attack resets simulated turn by turn (`1094209`), a squad election, and the plain 80-round wait (`d7e4863`); 3.0.1 compatibility and lock fixes added. Known flaw: the election sends the spare champion to far-away solo (gold) work. Not evaluated on 3.0.4. |
+| `bots/exp-demand/`, `bots/exp-assembly/`, `bots/exp-refresh/` | Older 2.2.5 experiments (history only). |
+| `bots/sprint3/` | Leader/follower grouping (worse than sprint2 on 2.2.5; history). |
+| `bots/hunter/`, `bots/ganker/` | Test opponents. The hunter (stuns, attacks any visible enemy) is the stand-in for top teams. |
+| `bots/inspect/` | Map dumper: `$CAMBC run inspect inspect --map M --rounds 1; python scripts/logs.py replays`. |
+| `maps3/` | **The 35-map 3.0 platform pool** (from the user's `cambc maps pull`). Test on this. |
+| `maps/`, `maps-platform/` | Old 2.2.5 maps (history). |
+| `scripts/games.py` | Resumable runner: `python scripts/games.py BOT OPP OUT_DIR JOBS map:side ...`. Release mode, stats JSON per game, large log limit, skips games already done. |
+| `scripts/pair.py` | `python scripts/pair.py CONTROL_DIR CANDIDATE_DIR`: game-by-game pairing plus totals (wins, gems, gold, champion/camp deaths). |
+| `scripts/suite.py` | Older runner (`--maps maps3`). It deletes `replays/suite` each run, so never run two at once. Prints fuel caps. |
+| `scripts/logs.py` | Prints a team's stdout from a replay (`team-a` / `team-b`). |
+| `results/3.0.4/` | Saved per-game results (§6). |
 
-**Testing protocol:**
-- Run suites against the starter, the ganker and the hunter, on both `maps` and `maps-platform`: 90 games in about 30 minutes, best run in the background.
-- **Pre-build each bot first** (`$CAMBC run B B --map maps/3eb63432-*.map26a --rounds 1 --release -o replays/prebuild`). Otherwise parallel games race to rebuild the same `.wasm` and one game fails with "NO REPLAY".
-- Never run a bot against itself under the same name; copy it to another folder first.
-- **Quick checks:**
-  - **Debug runs:** `dbg()` output and a `TEL` line every 100 rounds (no-op turns by decision branch, fuel skips, follower distance to the leader in sprint3).
-  - **Fuel sensitivity:** copy the bot and add `for _ in range(3): me.position(); me.can_attack()` before `act()` (about +60k fuel per turn). Scores must stay identical.
+**Testing protocol (3.0.x):**
+- **Full protocol:** 35 maps × both sides × {starter, ganker, hunter} = 210 games, using `games.py` with all maps:
+  ```sh
+  ALL=$(ls maps3 | sed 's/.map26a//' | awk '{print $1":a "$1":b"}' | tr '\n' ' ')
+  ```
+- **Pre-build** happens automatically in `games.py`. Never run a bot against itself under the same name.
+- **Determinism:** identical inputs give byte-identical replays. One run per game is enough, but only compare within the same engine version.
+- **Debug traces:** copy a bot into an excluded folder (add it to `.git/info/exclude`) and print a per-turn `TR` line (branch, HP, camps and foes in range, ally distances), then read the turns before each `DIED`. This is how both 3.0 diagnoses in §5 were made.
 
-## 4. Hard-won engine / SDK facts
+## 4. Engine / SDK facts (3.0.4 unless noted)
 
-- **Fuel:** Python gets 2.5M per turn. The first gameplay turn gets 5M, the draft 25M.
-  - The fuel log in the replay zip is `team-X.fuel`: 13-byte header, then 8 limits as u64, then one u64 per turn.
-  - A turn at the cap is suspended (no crash).
+- **Fuel:**
+  - Python gets 2.5M per turn, the draft 25M, and the first gameplay turn 5M.
+  - The first turn's entry in the fuel log reads 5.0M even when init finishes with about 1.5M to spare, so ignore it.
   - **Each SDK call costs about 20k.**
-- **Expensive SDK calls:**
-  - `vision.camp_groups()` rebuilds every group: about 1.1M per call. Use cached groups plus `vision.visible_tiles()`.
-  - `Champion.move_towards` runs a full BFS (shortest-path search) every call. We use one `DistanceField.compute_to` per step with `max_distance = width * height`, because the default cap is too short on big maps.
-- **Fuel guards that look at remaining fuel make behaviour chaotic.** A ~50k change once flipped a game from 352 gems to 0. Keep per-turn cost low, and prefer fixed budgets (e.g. 2 reach checks per turn) over "if fuel_remaining() < X".
-- **The installed SDK differs from the user's docs.** `vision.awake_camp_tiles` is missing, and `ChampionType(3)` raises. Check names against `sdk/python/cambc/*.py`.
-- **Vision:** you can't see into bushes from outside. Some camps are ringed by holes, so only ranged champions can hit them; capturing also needs a walkable spawn tile.
+  - `vision.camp_groups()` costs about 1.1M per call.
+  - Fuel guards that check `fuel_remaining()` make behaviour chaotic, so prefer fixed budgets.
+- **Monster targeting (measured with probe bots, re-checked on 3.0.1):**
+  - Each awake camp makes one full-strength attack per round on the **nearest champion** in its range, re-chosen every round.
+  - Ties go to the earlier-drafted champion. Damage is not shared across a squad.
+  - **Ranges:** wolf 3, **elk 4**, **Golem 4**, **monolith 5**. Range-4 spells no longer avoid retaliation from elks.
+  - Camps sleep 2 rounds after nobody is in range.
+  - **An awake monolith can hit you unseen.**
+- **Camp values on 3.0:**
+
+  | Camp | HP | Gems | Gold |
+  | --- | --- | --- | --- |
+  | Wolf | 1,350 | 4 | 40 |
+  | Elk | 2,400 | 15 | 90 |
+  | Gem cluster | 120 | 7 | — |
+  | Gold cluster | 120 | — | 20 |
+  | Golem (new) | 5,000 (120 Strength) | 36 | 160 |
+
+  Value now comes from clusters added to groups. 36% of the pool's gems sit in monolith or Golem groups, which sprint2 skips.
+- **Other 3.0 rules:**
+  - Kill gold is **100**.
+  - Ward cooldown is 10.
+  - Altar locks take **5 hits**. A tribute against an enemy-locked altar becomes an attack on the lock, and errors if the attack is already spent.
+  - Marcella earns 2 gold per gem tributed, and it counts in `earnedGold`, which is the gold tiebreak.
+- **Stats on 3.0.4:**
+  - Ryth Strength 45; Varg Strength 40; Ren Strength 35 with stun 0.75× Focus; Vendetta HP 1,000; Vesper HP 1,000, Strength 55, +33% gold.
+  - Tavi Focus 110, HP 900; Stellar Focus 70, HP 650.
+  - Heart of Ruin (new): Strength 30, damaging dash 1.5× Focus with radius 1, up to +50% damage when hurt.
+  - **Prism gains 1.5 Focus per carried gem.**
+  - **Read these at runtime instead of hard-coding them:** `Champion.design(t).base_stats()`, `.abilities()` with `info().modifier/range/radius`, `cambc.constants` and `cambc.constants.passive_abilities`.
+- **The draft has 12 picks** (`HEART_OF_RUIN` = 11). `ChampionType` has 13 values: Cassi and Issac are separate types.
 - **Rules that matter:**
-  - One ability cast per turn, shared by both slots.
+  - One ability cast per turn.
+  - Ryth's and Ren's stuns forbid walking that turn. Varg's shield and Marcella's reset don't.
   - Damage cancels recall but not tribute.
-  - Stun, death or an altar lock cancels a tribute.
-  - Rewards are split among allies on the region.
   - The starting team alternates each round, so an enemy can act twice between two of our turns.
-- **Platform errors:** `main.py` prints `turn error: ... at <line numbers>` in release builds. Match those line numbers against `git show <sha>:bots/sprint2/src/bot.py` to identify which version produced the logs.
-- **Monster targeting (measured with a probe bot on 7ac1d8eb, elk and wolf):**
-  - Each awake camp makes one attack per round, at full strength, on one champion. Damage is not shared across a squad.
-  - It hits the nearest champion within range 3 (Chebyshev), re-chosen every round. Who attacked it doesn't matter, and it doesn't stick to a target.
-  - Ties go to the earlier-drafted champion. HP and tile position don't decide it.
-  - Range is 3 for elk and wolf: hit at 1–3, never at 4. So spells with range 4 hit camps without retaliation.
-  - Not tested: whether camps also target enemy champions.
-  - The old squad estimate (damage ÷ squad size, × 0.65) has no basis. The bot still rarely dies to camps (11 deaths in ~2,000 clears) because retreating at 35% HP passes aggro to the next-nearest champion.
-- **Repeatability:** identical inputs give byte-identical replays and fuel logs, even with games running in parallel. Results from different sessions can differ (ganker: 12/20 here vs 13/20 earlier), so compare only against baselines measured in the same session.
-- **Map identity:** a platform summary's `mapHash` is the SHA-256 of the `.map26a` file. 7ac1d8eb, dd8a22f2, 73ea9d96, e0125da0, 274fa801 and 4abecba3 have all appeared on the platform.
+- **Local runner bug (3.0.x):** some games fail with "unexpected end-of-file" and no replay at the default log limit. Pass `--log-limit 50000000` (both runners do now).
+- **`mapHash`** in a platform summary is the SHA-256 of the `.map26a` file.
 
-## 5. History in one paragraph
+## 5. History in brief
 
-The Sprint 1 bot (splitting up to farm camps) beat the starter but lost every platform game against top teams. Their champions roam in groups with stuns: across the summaries, our team had 0 kills to 94 deaths. Several games had our team frozen all game because a fuel guard (a 1.3M reserve) blocked every path search; fixed in `6fa307a`, `d7d178f` and `1b919f4`. **The platform summaries the user sent most recently were still from old commit `28501c9`.** Make sure the user uploads the latest `sprint2.zip`. Group mode alone (sprint3) made results worse. E1, deliberate ability use, made them better (below).
+- **2.2.5 era:**
+  - E1 abilities (`84f786e`), kill ordering (`5789ee4`, 62/90 on the old maps).
+  - Probe-measured targeting.
+  - Demand and assembly experiments: per-champion solo feasibility helped the old maps, but the squad election made a spare champion farm gold far away and caused cascading failed waits on e0125da0.
+- **3.0 patch:**
+  - Moved to 3.0.1 (`0f2362e`) and then 3.0.4 (`4ba2fb5`).
+  - Fixed the altar-lock turn error, which accounted for 113 of 139 turn errors (`a0ed551`).
+  - The control (sprint2 `a0ed551`) on 3.0.1 scored 125/210: starter 51/70, ganker 58/70, hunter 16/70 with about 44 deaths per game.
+- **Camp deaths (about 0.9 per game against the starter):** caused by unseen awake monoliths and by retreats from two elks that start too late. Two retreat-timing fixes were tested and dropped, because they gave up farming on two-elk groups.
+- **Hunter deaths:** a lone farmer keeps approaching, fighting or capturing with 2–4 enemies within 5 tiles, hits back, retreats on foot at 35% HP and is chased down. That led to `exp-combat` (§7).
 
-## 6. Results (release mode, both sides; wins / games)
+## 6. Results (3.0.4, `maps3`, release; per-game files in `results/3.0.4/`)
 
-| Version | Starter local | Starter platform | Ganker local | Ganker platform | Hunter local | Hunter platform | Total /90 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| sprint2 `1b919f4` | 17/20 | 8/10 | 14/20 (351 deaths) | 9/10 | 7/20 (728 deaths) | 1/10 (380 deaths) | 56 |
-| sprint3 `5b426a0` (grouping) | 13/20 | 8/10 | 7/20 (446 deaths) | 8/10 | 5/20 (709 deaths) | 1/10 (228 deaths) | 42 |
-| **sprint2 `84f786e` (E1)** | 16/20 | 9/10 | 13/20 (333 deaths) | 10/10 | 6/20 (726 deaths) | 7/10 (290 deaths) | **61** |
-| sprint3 + E1 | 13/20 | 10/10 | 5/20 (386 deaths) | 6/10 | 6/20 (714 deaths) | 1/10 (259 deaths) | 41 |
+| Bot | vs hunter (70) | vs starter (70) | vs ganker (70) |
+| --- | --- | --- | --- |
+| **Control sprint2 `a0ed551`** | 14 wins, 15,548 gems, 2,868 champion deaths | 51 wins, 40,209 gems | **not finished** (18/23 games done when the session ended) |
+| `exp-combat` `4ba2fb5` (pre-fix) | 13 wins, 16,210 gems, 2,152 deaths (−25%); hunter banked −18% | 48 wins, 36,214 gems (−10%) | — |
+| `exp-combat` `9aa3ef4` (fixed) | **not finished** (first 12 games: 3 wins vs 2, gems +31%, deaths −37%) | — | — |
 
-**Losses to the starter** (farming races, 0–1 deaths each):
-- 274fa, from both sides.
-- e6f13, from both sides. Its gem camps are ringed by holes, and our draft is all melee.
-- 7ac1d8eb (71×71), as team B.
+Focused sets for `9aa3ef4` vs the control:
+- **9 hunter games:** 3 wins vs 0, gems +16%, deaths −24%.
+- **6 worst starter games:** 4 wins vs 6, gems 2,451 vs 2,798.
+- 01elk_arena team A is fixed (1,008 gems vs 720). Still behind: 00corners A, 01fractured A, 00swirl B.
 
-## 7. Agreed plan (the user's revised order, from an external review)
+## 7. Agreed plan (the user's current order)
 
-The external review's core thesis: **farm in small groups, concentrate quickly for valuable fights, split again afterwards.** A fixed structure (sprint2 always split, sprint3 always grouped) wastes champion turns.
-
-1. ~~Remove wasted actions and choose abilities deliberately.~~ Done as E1 (`84f786e`).
-2. **Mixed-camp targeting and the survival estimate (next).**
-   - `fight()` currently hits the lowest-health camp in range (`min(..., key=health)`), so it kills 500-HP gem clusters before 2,400-HP elks. Damage taken stays at its maximum until the elks die.
-   - Meanwhile `squad_size` assumes damage tapers off (`MULTI_CAMP_FACTOR = 0.65`).
-   - Change to: target the camp that removes the most damage per turn of killing time (its strength divided by turns to kill it). Exception for Varg: prefer the target that maximises his splash. Then make the survival estimate match the new kill order.
-   - Also cap squad waits (`SQUAD_WAIT = 80` is longer than a death's 60-round respawn), e.g. 20 rounds, and abort if support isn't getting closer.
-3. **Danger until our next action**, replacing "35% health" and "even numbers nearby":
-   - Count the enemies that can reach us before our next turn, allowing them two actions because of the alternating turn order, plus stuns and camps.
-   - Then coordinate combat: a shared reachable target, different attack tiles for each champion, a stop condition for chases, staggered stuns.
-   - Add adaptive modes: **farm** (split) / **contest** (concentrate, shared target) / **recover-and-deposit** (escort carriers). Shared memory needs threat and target messages that carry freshness information.
-4. **A full route check: attack, capture tile, exit** (walking vs dash vs teleport crystal). Then test a draft change: a ranged attacker plus a mobile collector where the map needs it.
-5. **Builds and group sizes.**
-   - For Ryth, compare Health against Strength shards while holding the emblem family constant.
-   - Measure first-capture time, gems banked, recovery time and deaths.
-   - Later experiments: Willow sustain pairs, Cassi & Issac, capture and tribute interception, tribute safety (don't start a tribute while threatened or stunned; avoid locked altars).
-
-**For every combat change, test with sprint2's routing and with sprint3's grouping.** Grouping has an economic cost, and it's still unknown whether coordinated abilities repay it.
+1. **Finish evaluating `exp-combat` `9aa3ef4`** with the full protocol on 3.0.4: the control's ganker suite plus all 210 candidate games.
+   - Promote only if the paired results hold up across all three opponents (`a0ed551` remains the submission until then).
+   - The first combat patch's scope is **fixed**. It triggers only on enemy champions within 5 tiles.
+   - Damage bound per enemy: two enemy turns, legal casts only, kit read from engine ability data and cached per type.
+   - It disengages when the enemies within 5 outnumber me plus allies within 2 tiles, or when the enemies' damage (not camps alone) would put me below 35%.
+   - It then takes the safest legal option: walk to the lowest-risk tile, preferring allies, then spawn; shield or Marcella's enhanced attack before walking; or Ryth/Ren stun in place.
+   - The current target is avoided for 30 rounds.
+2. **Known limit of `exp-combat`:** on contested maps (00split, 01fractured) disengaging gives up captures without saving lives. The next combat steps, after promotion: regroup / contest mode (concentrate on a shared target), damage sharing in camp fights (step back so an ally becomes nearest), and pursuit rules.
+3. **Draft experiment: Ren → Vesper,** everything else fixed. Vesper on 3.0.4 has 1,000 HP, 55 Strength, ranged attacks and +33% gold. Check capture access.
+4. **Marcella's collection and banking** (2 gold per gem tributed): consider making her the capturer and banking more often.
+5. **Later, separate experiments:**
+   - Prism with a managed gem bag (1.5 Focus per gem; at 27 gems his area spell kills 120-HP clusters).
+   - Willow sustain pairs; Heart of Ruin.
+   - Monolith and Golem modelling.
+   - Rescoring routes for the new economy, including capture time (5 rounds).
+   - `exp-demand-asm` on 3.0.4, but only after fixing its spare-champion flaw.
+6. Excluded until the user says otherwise: wards and dashes.
 
 ## 8. State at handoff
 
-- `bots/sprint3` has E1 ported and is committed. It's still clearly worse than sprint2 (41/90 vs 61/90). Permanent grouping costs more than coordinated abilities win back, which supports the adaptive farm/contest/recover idea in §7 step 3. sprint2 at `84f786e` was sent to the user to upload.
-- After that: step 2 of §7 on sprint2 (and ported to sprint3), with checks:
-  - **Check A:** against the starter, no worse than 16/20 local and 9/10 platform.
-  - **Check B:** against the hunter and ganker, fewer deaths.
-  - **Check C:** in debug logs, elks get killed before gem clusters in mixed groups.
-- Ask the user for fresh platform summaries (`cambc matches summary <id> --json`) of the latest submission, plus match zips. New maps can be added with `scripts/extract_map.py`.
-
-**Next session's update: the plan was revised and the step-1 result recorded.**
-- **Revised sequence:**
-  0. Probe monster targeting (done; see §4).
-  1. Refresh `need` after purchases.
-  2. Kill ordering.
-  3. Replace the survival model, checking predicted damage against what the most-hit champion actually took.
-  4. Squad-wait cap with a team-wide, expiring abandonment cooldown.
-
-  Gates check for regressions rather than demanding improvement: an 18-game matched set after each commit, then the full protocol on the combined candidate.
-- **Same-session baseline (`84f786e`), 60/90:**
-  - Starter: 16/20 local, 9/10 platform.
-  - Ganker: 12/20 (314 deaths) local, 10/10 (85) platform.
-  - Hunter: 6/20 (726) local, 7/10 (290) platform.
-- **Step 1, refreshing `need` from own stats after each purchase plus an on-site safeguard: not committed.** Compared with the matched baseline:
-  - Previously excluded groups were cleared only 2 times.
-  - Overall clears +10% and gems banked +7%, but wins fell from 11 to 9.
-  - The refreshed estimate for excluded groups still needs the whole team, and teammates whose own estimate stays at 99 never join. **Champions must agree on one team-wide `need`** before refreshing helps.
-- **Platform summaries:** of the 10 sent, 8 were losses. Most were farming races rather than deaths. Helpers who do the fighting often earn 0 gold, because only the lowest-numbered squad member captures.
+- **Submission prepared:** `sprint2-a0ed551-cambc3.0.4.zip`.
+  - Bundle of `bots/sprint2` at `a0ed551`, built with CLI 3.0.4. SHA-256 `51439ccd0aed126d17611706dd451b7859621f94300552e0998cd843bf472ae2`.
+  - A complete smoke game of the unpacked artifact against the starter on 00eight won at round 1,368, with 0 errors and 0 capped turns.
+  - The user has the file. Rebuild it with `$CAMBC bundle sprint2 --output sprint2.zip`.
+- **Rollback:** `rollback-sprint2-84f786e-cambc3.0.4.zip`, rebuilt from `84f786e`. It ran 300 rounds under 3.0.4 cleanly. If the user uploaded a later version than `84f786e`, their own copy is the real rollback.
+- **Unfinished, rerun first:** the control's ganker suite and the full `exp-combat 9aa3ef4` protocol (hunter → starter → ganker). Use `scripts/games.py` into one folder per bot and opponent, then `scripts/pair.py`.
+  - Partial results when the session ended (the raw JSONs were in scratch and are gone, so rerun all of them):
+    - `exp-combat 9aa3ef4` vs hunter, first 16 games (side a): wins 5→7, gems 4456→5819, champion deaths 824→515 against the control. See `results/3.0.4/PARTIAL16_*`.
+    - Control vs ganker, first 28 games: 22 wins, 13932 gems. See `results/3.0.4/PARTIAL28_*` (right column).
+  - Both are encouraging, but 16 games on one side are not a promotion case.
+- **Ask the user** for fresh platform match summaries of the 3.0 submission (`cambc matches summary <id> --json`) to check that the local opponents still represent the ladder.

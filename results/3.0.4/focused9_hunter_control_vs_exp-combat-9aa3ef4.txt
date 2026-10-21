@@ -1,0 +1,10 @@
+00collis-b   | L r1523   29-1017 gold=182   dth=53/0      | L r2000   29-681  gold=280   dth=48/0     
+00eight.-a   | L r2000  114-457  gold=804   dth=112/0     | L r2000   96-313  gold=944   dth=62/3     
+00lanes.-b   | L r1564  389-1002 gold=2072  dth=35/2      | L r2000  429-899  gold=2002  dth=34/3     
+00pilgri-b   | L r2000  135-150  gold=2410  dth=62/0      | W r2000  210-30   gold=2070  dth=36/2     
+00split.-b   | L r1681  603-1010 gold=2380  dth=39/0      | W r2000  710-655  gold=2002  dth=41/0     
+01concen-b   | L r2000  285-373  gold=2094  dth=13/0      | W r2000  320-280  gold=2584  dth=10/0     
+01fractu-b   | L r2000  140-298  gold=1424  dth=28/3      | L r2000   66-191  gold=740   dth=26/3     
+01gold_r-b   | L r1961  198-1001 gold=1132  dth=57/0      | L r2000  286-847  gold=1468  dth=39/0     
+01hooks.-a   | L r1692    0-1012 gold=780   dth=72/1      | L r2000   44-484  gold=1280  dth=60/0     
+TOTAL wins/gems/gold/champDeaths/campDeaths: [0, 1893, 13278, 471, 6] | [3, 2190, 13370, 356, 11]
