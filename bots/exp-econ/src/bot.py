@@ -549,23 +549,32 @@ def enemy_lock(altar):
 
 
 def tribute(me):
-    commit(None)
+    """False when no banking tile can be reached (01boss_battle: the only altar is walled in by
+    holes and a monolith), so the champion keeps farming instead of standing still with its gems."""
     altar, d = nearest_altar(me.position())
     if d > 1:  # path-nearest altar: the straight-line nearest can be cut off by holes
         goals = bc.Bitboard()
         for a in st.altars:
             if not enemy_lock(a):
                 goals |= ring(a, 1)
-        walk_to(me, ring(altar, 1) if goals.is_empty() else goals)
+        if goals.is_empty():
+            goals = ring(altar, 1)
+        goals &= st.connected
+        if goals.is_empty():
+            return False
+        commit(None)
+        walk_to(me, goals)
         altar, d = nearest_altar(me.position())
+    commit(None)
     if d <= 1:
         if enemy_lock(altar):  # tributing becomes an attack on the lock (5 hits): keep the attack for it
             if me.can_attack():
                 me.submit_gems(altar)
-            return
+            return True
         hit_back(me)  # free attacks before the channel starts
         me.submit_gems(altar)
         dbg("tribute %d gems" % me.gem_count())
+    return True
 
 
 def can_reach(me, info):
@@ -860,8 +869,7 @@ def act(me, rnd, hp_frac):
     st.branch = "champfight"
     if defend(me) or hunt_carrier(me):
         return
-    if want_tribute(me, hp_frac):
-        st.branch = "tribute"
-        tribute(me)
+    st.branch = "tribute"
+    if want_tribute(me, hp_frac) and tribute(me):
         return
     farm(me, rnd, hp_frac)
