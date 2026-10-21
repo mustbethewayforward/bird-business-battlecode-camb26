@@ -101,6 +101,7 @@ class State:
     walkable = None
     connected = None
     camp_spawns = None
+    bank_ring = {}
     spawn = None
     spawn_list = []
     altars = []
@@ -147,6 +148,11 @@ def init():
     st.bushes = gm.bushes()
     st.max_dist = gm.width() * gm.height()  # default BFS cap too short on big maps
     st.connected = st.static_blocked.reachable_tiles(st.spawn_list[0], st.max_dist)  # hole-ringed pockets excluded
+    st.bank_ring = {}  # per-altar banking tiles, built once: rebuilding them each turn capped fuel (01yellow)
+    for a in st.altars:
+        bb = bc.Bitboard()
+        bb.draw_chebyshev(a, 1)
+        st.bank_ring[a] = bb & st.connected
     allies = bc.champions(ALLY)
     st.handles = sorted(int(c) for c in allies)
     st.slot = st.handles.index(int(me))
@@ -559,10 +565,10 @@ def tribute(me):
         goals = bc.Bitboard()
         for a in st.altars:
             if not enemy_lock(a):
-                goals |= ring(a, 1)
+                goals |= st.bank_ring[a]
         if goals.is_empty():
-            goals = ring(altar, 1)
-        goals &= st.connected
+            goals = st.bank_ring[altar].copy()
+        goals &= ~(bc.vision.champion_tiles() | bc.vision.camp_tiles())
         if goals.is_empty():
             return False
         commit(None)
