@@ -100,6 +100,7 @@ class State:
     ready = False
     walkable = None
     connected = None
+    camp_spawns = None
     spawn = None
     spawn_list = []
     altars = []
@@ -155,9 +156,11 @@ def init():
     avg_str = sum(s.base_strength for s in stats) / len(stats)
     avg_hp = sum(s.base_health for s in stats) / len(stats)
     st.groups = []
+    st.camp_spawns = bc.Bitboard()
     for i, g in enumerate(gm.camp_groups()):
         info = GroupInfo(i, g, avg_str, avg_hp, len(allies))
         st.groups.append(info)
+        st.camp_spawns |= info.tiles  # always path around camps: seen only up close, they flipped routes (01the_farm)
     st.ready = True
     dbg("init slot=%d %s groups=%s" % (st.slot, me.champion_name(),
         [(g.idx, g.gems, g.need) for g in st.groups if not g.skip]))
@@ -266,7 +269,7 @@ def walk_to(me, goals):
     origin = me.position()
     if goals.is_set(origin):
         return False
-    blocked = st.static_blocked | bc.vision.champion_tiles() | bc.vision.camp_tiles()
+    blocked = st.static_blocked | bc.vision.champion_tiles() | bc.vision.camp_tiles() | (st.camp_spawns & ~goals)
     blocked.set(origin, False)
     roots = goals & ~blocked
     if roots.is_empty():
