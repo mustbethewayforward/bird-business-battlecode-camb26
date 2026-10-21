@@ -1,6 +1,7 @@
 # Experimental (not shipped): sprint2 a0ed551 + disengaging from losing champion fights. See HANDOFF.
 # Shared memory byte k = champion k's target group idx + 1 (0 = none).
 import cambc as bc
+from cambc import constants as K
 from cambc import game_map as gm
 
 ALLY, ENEMY = bc.Team.ALLY, bc.Team.ENEMY
@@ -49,15 +50,7 @@ LOCK = bc.ConsumableType.ALTAR_LOCK
 THREAT_ZONE = 5          # enemies this close count when weighing support (observed approach zone)
 SUPPORT_RANGE = 2        # allies this close can help before our next turn
 AVOID_ROUNDS = 30        # after disengaging, leave that camp group alone this long
-# Enemy kit for the damage bound: (attack range, has an attack reset, damaging spell x Focus, spell reach).
-# Shields, heals, dashes and stuns without damage add nothing; Heart of Ruin's dash lands 2 tiles + radius 1.
-THREAT_KITS = {
-    CT.RYTH: (1, True, 1.0, 4), CT.VESPER_VALE: (3, True, 0.0, 0), CT.VENDETTA: (1, True, 0.0, 0),
-    CT.CASSI: (3, False, 2.0, 4), CT.ISSAC: (1, True, 0.0, 0), CT.STELLAR: (3, False, 2.0, 4),
-    CT.PRISM: (3, False, 1.5, 4), CT.MARCELLA: (1, True, 2.0, 4), CT.WILLOW: (3, True, 0.0, 0),
-    CT.REN: (1, False, 1.25, 4), CT.VARG: (1, True, 0.0, 0), CT.TAVI: (3, True, 1.4, 4),
-    CT.HEART_OF_RUIN: (1, False, 1.75, 3),
-}
+HOR_BONUS = K.passive_abilities.HEART_OF_RUIN_MISSING_HEALTH_DAMAGE_MAX_BONUS
 MODELLED_CAMPS = (bc.CampType.WOLF, bc.CampType.ELK, bc.CampType.GEM_CLUSTER, bc.CampType.GOLD_CLUSTER)
 
 
@@ -140,6 +133,7 @@ class State:
     varg = False
     camp_str = {}
     camp_at = {}            # camp spawn tile -> (attack range, strength); camps never leave their tile
+    kits = {}               # champion type -> threat_kit()
     branch = ""
     reach_budget = 0
     fuelskip = 0
@@ -329,6 +323,25 @@ def shop(me):
             me.buy(LOCK)
 
 
+def threat_kit(kind):
+    """(attack range, has an attack reset, best damaging spell x Focus, its reach) from the engine's ability
+    data, cached per champion type. Shields and heals add nothing; a damaging dash (Heart of Ruin) reaches
+    its range plus its landing radius."""
+    kit = st.kits.get(kind)
+    if kit is None:
+        d = bc.Champion.design(kind)
+        reset, mult, reach = False, 0.0, 0
+        for ab in d.abilities():
+            if ab.is_attack_reset():
+                reset = True
+            elif ab.is_damage() or ab.is_aoe_damage() or ab.is_cc() or ab.is_dash():
+                info = ab.info()
+                if info is not None and info.modifier > mult:
+                    mult, reach = info.modifier, int(info.range + getattr(info, "radius", 0))
+        kit = st.kits[kind] = (d.base_stats().base_attack_range, reset, mult, reach)
+    return kit
+
+
 def threat(t, p):
     """Upper bound on damage enemy t can deal to tile p before my next turn: two enemy turns (teams
     alternate who starts a round), one move each, legal casts only. A bound, not a prediction."""
@@ -355,8 +368,12 @@ def disengage(me, rnd):
     foes = []
     for e, ep in near:
         try:
-            rng, reset, mult, reach = THREAT_KITS.get(e.champion_name(), (1, True, 2.0, 4))
-            foes.append((rng, reset, mult, reach, e.strength(), e.focus(), ep))
+            kind = e.champion_name()
+            rng, reset, mult, reach = threat_kit(kind)
+            boost = 1.0
+            if kind == CT.HEART_OF_RUIN:  # up to +50% damage with missing health
+                boost += HOR_BONUS * (1 - e.health() / e.max_health())
+            foes.append((rng, reset, mult, reach, boost * e.strength(), boost * e.focus(), ep))
         except bc.Error:
             continue
     awake = []
