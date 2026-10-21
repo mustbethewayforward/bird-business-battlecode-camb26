@@ -99,6 +99,7 @@ def squad_size(hp, dps, avg_str, avg_hp, n_allies):
 class State:
     ready = False
     walkable = None
+    connected = None
     spawn = None
     spawn_list = []
     altars = []
@@ -144,6 +145,7 @@ def init():
     st.altars = gm.altars().positions()
     st.bushes = gm.bushes()
     st.max_dist = gm.width() * gm.height()  # default BFS cap too short on big maps
+    st.connected = st.static_blocked.reachable_tiles(st.spawn_list[0], st.max_dist)  # hole-ringed pockets excluded
     allies = bc.champions(ALLY)
     st.handles = sorted(int(c) for c in allies)
     st.slot = st.handles.index(int(me))
@@ -574,7 +576,7 @@ def can_reach(me, info):
         spots = bc.Bitboard()  # camps ringed by holes need range
         for t in info.tiles.positions():
             spots.draw_chebyshev(t, st.rng)
-        spots &= st.walkable
+        spots &= st.connected
         spots &= ~info.tiles
         info.reach = not spots.is_empty()
     return info.reach
