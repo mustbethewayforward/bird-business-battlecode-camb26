@@ -1,0 +1,9 @@
+00expans-a   L  387-528   ctl L   52-508  dth=2
+00expans-b   W  453-198   ctl L   63-431  GAIN dth=0
+00rows.m-a   L  103-340   ctl L  380-396  dth=1
+00rows.m-b   L  122-326   ctl W  686-351  LOSS dth=3
+01island-b   L   88-150   ctl L    0-150  dth=3
+01starfi-a   W  654-262   ctl W  847-292  dth=0
+01starfi-b   L  327-490   ctl W  547-350  LOSS dth=2
+01the_fa-a   L    0-0     ctl W   22-0    LOSS dth=0
+games 8  wins 2 (control 4)  gems 2134 (control 2597)  deaths 11

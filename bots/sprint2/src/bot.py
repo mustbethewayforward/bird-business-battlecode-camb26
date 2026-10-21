@@ -99,6 +99,7 @@ def squad_size(hp, dps, avg_str, avg_hp, n_allies):
 class State:
     ready = False
     walkable = None
+    connected = None
     spawn = None
     spawn_list = []
     altars = []
@@ -129,6 +130,7 @@ class State:
     reach_budget = 0
     fuelskip = 0
     tel = None
+    path_d = None  # path distance to the last walk_to goal this turn (None = no search ran)
 
 
 st = State()
@@ -143,6 +145,7 @@ def init():
     st.altars = gm.altars().positions()
     st.bushes = gm.bushes()
     st.max_dist = gm.width() * gm.height()  # default BFS cap too short on big maps
+    st.connected = st.static_blocked.reachable_tiles(st.spawn_list[0], st.max_dist)  # hole-ringed pockets excluded
     allies = bc.champions(ALLY)
     st.handles = sorted(int(c) for c in allies)
     st.slot = st.handles.index(int(me))
@@ -273,6 +276,7 @@ def walk_to(me, goals):
     field = bc.DistanceField()
     field.compute_to(blocked, roots, dest, bc.Bitboard(), st.max_dist)
     here = field.get(origin)
+    st.path_d = here
     steps = [p for p in blocked.reachable_tiles(origin, 1).positions() if p != origin]
     steps.sort(key=field.get)
     for p in steps[:3]:
@@ -545,19 +549,32 @@ def enemy_lock(altar):
 
 
 def tribute(me):
-    commit(None)
+    """False when no banking tile can be reached (01boss_battle: the only altar is walled in by
+    holes and a monolith), so the champion keeps farming instead of standing still with its gems."""
     altar, d = nearest_altar(me.position())
-    if d > 1:
-        walk_to(me, ring(altar, 1))
-        d = dist(me.position(), altar)
+    if d > 1:  # path-nearest altar: the straight-line nearest can be cut off by holes
+        goals = bc.Bitboard()
+        for a in st.altars:
+            if not enemy_lock(a):
+                goals |= ring(a, 1)
+        if goals.is_empty():
+            goals = ring(altar, 1)
+        goals &= st.connected
+        if goals.is_empty():
+            return False
+        commit(None)
+        walk_to(me, goals)
+        altar, d = nearest_altar(me.position())
+    commit(None)
     if d <= 1:
         if enemy_lock(altar):  # tributing becomes an attack on the lock (5 hits): keep the attack for it
             if me.can_attack():
                 me.submit_gems(altar)
-            return
+            return True
         hit_back(me)  # free attacks before the channel starts
         me.submit_gems(altar)
         dbg("tribute %d gems" % me.gem_count())
+    return True
 
 
 def can_reach(me, info):
@@ -568,7 +585,7 @@ def can_reach(me, info):
         spots = bc.Bitboard()  # camps ringed by holes need range
         for t in info.tiles.positions():
             spots.draw_chebyshev(t, st.rng)
-        spots &= st.walkable
+        spots &= st.connected
         spots &= ~info.tiles
         info.reach = not spots.is_empty()
     return info.reach
@@ -582,13 +599,25 @@ def target_ok(info, rnd, pos, alive):
     return info.respawn_at - rnd <= dist(pos, info.center)
 
 
+def squad_lead():
+    """(slot, group) of the lowest-slot ally committed to a squad group: one squad at a time,
+    else champions split between neighbouring squad groups and none ever fills (00expanse)."""
+    for k in st.alive_slots:
+        v = st.mem[k] if k < 8 and k != st.slot else 0
+        if v and st.groups[v - 1].need > 1:
+            return k, st.groups[v - 1]
+    return None
+
+
 def pick_target(me, rnd):
     pos = me.position()
     alive = alive_allies()
     cur = st.target
+    lead = squad_lead()
     if cur is not None and target_ok(cur, rnd, pos, alive):
         others = committed_others(cur)
-        if cur.need > 1 or cur.reward or not any(k < st.slot for k in others):
+        rival = cur.need > 1 and lead is not None and lead[1] is not cur and lead[0] < st.slot
+        if (cur.need > 1 and not rival) or cur.reward or (cur.need == 1 and not any(k < st.slot for k in others)):
             return cur
     best, best_score = None, 0.0
     my_str = max(1.0, me.strength())  # SDK calls ~20k each: once, not per group
@@ -600,7 +629,7 @@ def pick_target(me, rnd):
         others = len(committed_others(info))
         if info.need == 1 and others >= 1 and not info.reward:
             continue
-        if info.need > 1 and others >= info.need:
+        if info.need > 1 and (others >= info.need or (lead is not None and info is not lead[1])):
             continue
         d = dist(pos, info.center)
         value = info.gems + GOLD_WEIGHT * info.gold
@@ -619,7 +648,7 @@ def pick_target(me, rnd):
 
 
 def note_stuck(me, info, rnd):
-    d = dist(me.position(), info.center)
+    d = st.path_d if st.path_d is not None else dist(me.position(), info.center)  # straight line misleads around holes
     if st.stuck_key != info.idx or d < st.stuck_best:
         st.stuck_key, st.stuck_best, st.stuck = info.idx, d, 0
         return
@@ -798,6 +827,7 @@ def play_turn():
             me.gold_count(), None if st.target is None else st.target.idx))
     st.branch = ""
     st.reach_budget = 2
+    st.path_d = None
     bc.debug_block(lambda: tel_begin(me))
     act(me, rnd, hp_frac)
     bc.debug_block(lambda: tel_end(me, rnd))
@@ -839,8 +869,7 @@ def act(me, rnd, hp_frac):
     st.branch = "champfight"
     if defend(me) or hunt_carrier(me):
         return
-    if want_tribute(me, hp_frac):
-        st.branch = "tribute"
-        tribute(me)
+    st.branch = "tribute"
+    if want_tribute(me, hp_frac) and tribute(me):
         return
     farm(me, rnd, hp_frac)

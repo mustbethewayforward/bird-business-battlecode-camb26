@@ -1,0 +1,11 @@
+00ambush-a   L   70-531   ctl L  379-531  dth=0
+00expans-a   L  422-502   ctl L   52-508  dth=2
+00expans-b   L  345-480   ctl L   63-431  dth=0
+00rows.m-a   L  286-294   ctl L  380-396  dth=2
+00rows.m-b   L  126-340   ctl W  686-351  LOSS dth=9
+01boss_b-a   W    0-0     ctl L    0-0    GAIN dth=0
+01boss_b-b   W    0-0     ctl L    0-0    GAIN dth=7
+01island-b   W  356-120   ctl L    0-150  GAIN dth=4
+01starfi-a   L  282-362   ctl W  847-292  LOSS dth=0
+01the_fa-a   L    0-0     ctl W   22-0    LOSS dth=0
+games 10  wins 3 (control 3)  gems 1887 (control 2429)  deaths 24

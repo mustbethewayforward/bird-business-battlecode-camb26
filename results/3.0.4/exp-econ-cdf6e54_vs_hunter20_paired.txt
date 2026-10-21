@@ -1,0 +1,21 @@
+00ambush-a   L  150-239   ctl W  515-154  LOSS dth=26
+00ambush-b   W  375-338   ctl W   99-33   dth=5
+00contes-a   L    0-0     ctl L    0-0    dth=105
+00contes-b   L    0-0     ctl L    0-0    dth=86
+00eight.-a   L  136-383   ctl L  114-457  dth=113
+00eight.-b   L  225-251   ctl L  207-450  dth=95
+00expans-a   W  609-155   ctl W  178-41   dth=13
+00expans-b   W  531-30    ctl W  337-199  dth=0
+00packs.-a   L  160-1008  ctl L  316-1000 dth=39
+00packs.-b   L   44-1040  ctl L   92-1008 dth=51
+00split.-a   L  550-1020  ctl L  348-812  dth=59
+00split.-b   L  345-847   ctl L  603-1010 dth=72
+00swirl.-a   L   90-222   ctl L  158-404  dth=68
+00swirl.-b   L  150-405   ctl L  187-636  dth=62
+01boss_b-a   W    0-0     ctl W    0-0    dth=0
+01boss_b-b   W    0-0     ctl L    0-0    GAIN dth=0
+01corrid-a   W  254-114   ctl W   90-80   dth=3
+01corrid-b   W  295-119   ctl L   56-230  GAIN dth=10
+01island-a   W  149-29    ctl L    0-0    GAIN dth=39
+01island-b   W  168-20    ctl L    0-0    GAIN dth=8
+games 20  wins 9 (control 6)  gems 4231 (control 3300)  deaths 854

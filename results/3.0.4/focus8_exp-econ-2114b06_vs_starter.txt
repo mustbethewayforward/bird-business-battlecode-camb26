@@ -1,0 +1,9 @@
+00ambush-a   L  210-531   ctl L  379-531  dth=0
+00ambush-b   W  523-311   ctl L  171-362  GAIN dth=1
+00expans-a   W  533-404   ctl L   52-508  GAIN dth=3
+00expans-b   W  453-198   ctl L   63-431  GAIN dth=0
+01big_wo-a   W  493-366   ctl L  242-366  GAIN dth=0
+01big_wo-b   W  602-216   ctl L   78-218  GAIN dth=2
+01the_fa-a   L    0-0     ctl W   22-0    LOSS dth=0
+01the_fa-b   W   39-0     ctl L    0-0    GAIN dth=1
+games 8  wins 6 (control 1)  gems 2853 (control 1007)  deaths 7
