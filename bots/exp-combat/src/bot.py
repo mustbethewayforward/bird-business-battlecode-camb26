@@ -384,7 +384,9 @@ def disengage(me, rnd):
     here = risk_at(pos, foes, awake)
     support = 1 + sum(1 for p in st.ally_pos.values() if p != pos and dist(p, pos) <= SUPPORT_RANGE)
     outnumbered = len(near) > support
-    if not outnumbered and hp - here >= RETREAT_HP * max_hp:
+    floor = RETREAT_HP * max_hp
+    camps_only = hp - risk_at(pos, [], awake) < floor  # camp fights alone keep sprint2's behaviour
+    if not outnumbered and (hp - here >= floor or camps_only):
         return False
     # legal options: walk (with a shield or an enhanced attack first), or a stun that forbids walking
     blocked = st.static_blocked | bc.vision.champion_tiles() | bc.vision.camp_tiles()
