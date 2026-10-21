@@ -588,13 +588,25 @@ def target_ok(info, rnd, pos, alive):
     return info.respawn_at - rnd <= dist(pos, info.center)
 
 
+def squad_lead():
+    """(slot, group) of the lowest-slot ally committed to a squad group: one squad at a time,
+    else champions split between neighbouring squad groups and none ever fills (00expanse)."""
+    for k in st.alive_slots:
+        v = st.mem[k] if k < 8 and k != st.slot else 0
+        if v and st.groups[v - 1].need > 1:
+            return k, st.groups[v - 1]
+    return None
+
+
 def pick_target(me, rnd):
     pos = me.position()
     alive = alive_allies()
     cur = st.target
+    lead = squad_lead()
     if cur is not None and target_ok(cur, rnd, pos, alive):
         others = committed_others(cur)
-        if cur.need > 1 or cur.reward or not any(k < st.slot for k in others):
+        rival = cur.need > 1 and lead is not None and lead[1] is not cur and lead[0] < st.slot
+        if (cur.need > 1 and not rival) or cur.reward or (cur.need == 1 and not any(k < st.slot for k in others)):
             return cur
     best, best_score = None, 0.0
     my_str = max(1.0, me.strength())  # SDK calls ~20k each: once, not per group
@@ -606,7 +618,7 @@ def pick_target(me, rnd):
         others = len(committed_others(info))
         if info.need == 1 and others >= 1 and not info.reward:
             continue
-        if info.need > 1 and others >= info.need:
+        if info.need > 1 and (others >= info.need or (lead is not None and info is not lead[1])):
             continue
         d = dist(pos, info.center)
         value = info.gems + GOLD_WEIGHT * info.gold
