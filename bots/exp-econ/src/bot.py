@@ -101,6 +101,9 @@ class State:
     walkable = None
     connected = None
     camp_spawns = None
+    camp_block = None
+    dead_key = None
+    rnd = 0
     bank_ring = {}
     spawn = None
     spawn_list = []
@@ -166,7 +169,7 @@ def init():
     for i, g in enumerate(gm.camp_groups()):
         info = GroupInfo(i, g, avg_str, avg_hp, len(allies))
         st.groups.append(info)
-        st.camp_spawns |= info.tiles  # always path around camps: seen only up close, they flipped routes (01the_farm)
+        st.camp_spawns |= info.tiles
     st.ready = True
     dbg("init slot=%d %s groups=%s" % (st.slot, me.champion_name(),
         [(g.idx, g.gems, g.need) for g in st.groups if not g.skip]))
@@ -275,7 +278,7 @@ def walk_to(me, goals):
     origin = me.position()
     if goals.is_set(origin):
         return False
-    blocked = st.static_blocked | bc.vision.champion_tiles() | bc.vision.camp_tiles() | (st.camp_spawns & ~goals)
+    blocked = st.static_blocked | bc.vision.champion_tiles() | bc.vision.camp_tiles() | (camp_block() & ~goals)
     blocked.set(origin, False)
     roots = goals & ~blocked
     if roots.is_empty():
@@ -297,6 +300,19 @@ def walk_to(me, goals):
         except bc.Error as e:
             dbg("move error %r" % (e,))
     return False
+
+
+def camp_block():
+    """Spawn tiles of camps presumed alive, seen or not: camps are only blocked while visible, so
+    routes flipped as champions came into sight of them (01the_farm). Dead groups' tiles stay open
+    (00packs routes run through them). Rebuilt only when the set of dead groups changes."""
+    dead = tuple(g.idx for g in st.groups if g.reward or g.respawn_at > st.rnd)
+    if dead != st.dead_key:
+        st.dead_key = dead
+        st.camp_block = st.camp_spawns.copy()
+        for i in dead:
+            st.camp_block &= ~st.groups[i].tiles
+    return st.camp_block
 
 
 def go_home(me):
@@ -811,6 +827,7 @@ def play_turn():
         return  # turn 1 = setup only (fuel)
     me = bc.me()
     rnd = bc.round_number()
+    st.rnd = rnd
     shop(me)
     if not me.is_alive():
         if st.was_alive:
