@@ -129,6 +129,7 @@ class State:
     reach_budget = 0
     fuelskip = 0
     tel = None
+    path_d = None  # path distance to the last walk_to goal this turn (None = no search ran)
 
 
 st = State()
@@ -273,6 +274,7 @@ def walk_to(me, goals):
     field = bc.DistanceField()
     field.compute_to(blocked, roots, dest, bc.Bitboard(), st.max_dist)
     here = field.get(origin)
+    st.path_d = here
     steps = [p for p in blocked.reachable_tiles(origin, 1).positions() if p != origin]
     steps.sort(key=field.get)
     for p in steps[:3]:
@@ -619,7 +621,7 @@ def pick_target(me, rnd):
 
 
 def note_stuck(me, info, rnd):
-    d = dist(me.position(), info.center)
+    d = st.path_d if st.path_d is not None else dist(me.position(), info.center)  # straight line misleads around holes
     if st.stuck_key != info.idx or d < st.stuck_best:
         st.stuck_key, st.stuck_best, st.stuck = info.idx, d, 0
         return
@@ -798,6 +800,7 @@ def play_turn():
             me.gold_count(), None if st.target is None else st.target.idx))
     st.branch = ""
     st.reach_budget = 2
+    st.path_d = None
     bc.debug_block(lambda: tel_begin(me))
     act(me, rnd, hp_frac)
     bc.debug_block(lambda: tel_end(me, rnd))
