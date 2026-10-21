@@ -834,7 +834,7 @@ def play_turn():
 
 
 def tel_begin(me):  # debug only: snapshot to detect turns with no useful action
-    st.tel = st.tel or {"noop": {}, "turns": 0, "skip0": st.fuelskip}
+    st.tel = st.tel or {"noop": {}, "turns": 0, "skip0": st.fuelskip, "gain": 0, "maxgap": 0, "gold": 0, "gems": 0}
     st.tel["pos"], st.tel["atk"] = me.position(), me.can_attack()
 
 
@@ -846,10 +846,14 @@ def tel_end(me, rnd):
     if not acted:
         key = st.branch.split(":giveup")[0] or "none"
         t["noop"][key] = t["noop"].get(key, 0) + 1
+    if me.gold_count() > t["gold"] or me.gem_count() > t["gems"] or me.is_submitting_gems():
+        t["gain"] = rnd  # moving is not progress: gold, gems or a tribute is (both arrive between our turns)
+    t["gold"], t["gems"] = me.gold_count(), me.gem_count()
+    t["maxgap"] = max(t["maxgap"], rnd - t["gain"])
     if rnd % 100 == 0:
         top = sorted(t["noop"].items(), key=lambda kv: -kv[1])[:6]
-        print("TEL r%d s%d turns=%d noop=%d fuelskip=%d top=%s" % (
-            rnd, st.slot, t["turns"], sum(t["noop"].values()), st.fuelskip, top))
+        print("TEL r%d s%d turns=%d noop=%d fuelskip=%d gap=%d maxgap=%d top=%s" % (
+            rnd, st.slot, t["turns"], sum(t["noop"].values()), st.fuelskip, rnd - t["gain"], t["maxgap"], top))
 
 
 def act(me, rnd, hp_frac):
