@@ -549,9 +549,13 @@ def enemy_lock(altar):
 def tribute(me):
     commit(None)
     altar, d = nearest_altar(me.position())
-    if d > 1:
-        walk_to(me, ring(altar, 1))
-        d = dist(me.position(), altar)
+    if d > 1:  # path-nearest altar: the straight-line nearest can be cut off by holes
+        goals = bc.Bitboard()
+        for a in st.altars:
+            if not enemy_lock(a):
+                goals |= ring(a, 1)
+        walk_to(me, ring(altar, 1) if goals.is_empty() else goals)
+        altar, d = nearest_altar(me.position())
     if d <= 1:
         if enemy_lock(altar):  # tributing becomes an attack on the lock (5 hits): keep the attack for it
             if me.can_attack():
