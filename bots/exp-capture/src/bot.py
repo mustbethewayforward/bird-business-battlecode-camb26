@@ -15,6 +15,7 @@ SAFE_SHARE = 0.5
 MULTI_CAMP_FACTOR = 0.65
 SQUAD_WAIT = 80
 BLACKLIST_ROUNDS = 60
+CONTEST_GIVEUP = 60  # rounds on a capturable group before giving it up
 CARRIER_GEMS = 15
 CARRIER_HP = 0.5
 MOVE_FUEL_RESERVE = 600_000  # BFS max ~0.5M (measured); 1.3M froze big maps
@@ -86,6 +87,7 @@ class GroupInfo:
         self.reward = False
         self.wait_since = None
         self.capture_since = None
+        self.contest_far = None
 
 
 def squad_size(hp, dps, avg_str, avg_hp, n_allies):
@@ -130,6 +132,7 @@ class State:
     reach_budget = 0
     fuelskip = 0
     tel = None
+    rnd = 0
     path_d = None  # path distance to the last walk_to goal this turn (None = no search ran)
 
 
@@ -211,12 +214,14 @@ def observe(rnd):
         if isinstance(s, gm.CampGroupRespawning):
             info.respawn_at = rnd + max(1, s.timer)
             info.reward = False
+            info.capture_since = None  # a stale start made the next visit look contested at once
         elif isinstance(s, gm.CampGroupRewardAvailable):
             info.respawn_at = 0
             info.reward = True
         else:
             info.respawn_at = 0
             info.reward = False
+            info.capture_since = None
 
 
 def live_camps(info):
@@ -675,12 +680,52 @@ def capture(me, info, rnd):
     if info.tiles.is_set(me.position()):
         if info.capture_since is None:
             info.capture_since = rnd
-        elif rnd - info.capture_since > 8:  # contested
+            info.contest_far = None
+        elif rnd - info.capture_since > CONTEST_GIVEUP:
             info.capture_since = None
             give_up(info, rnd, 30)
+        elif rnd - info.capture_since > bc.constants.CAPTURE_TIME + 1:
+            contest(me, info)
         return
     info.capture_since = None
     walk_to(me, info.tiles)
+
+
+def contest(me, info):
+    """A reward pays out only after CAPTURE_TIME rounds with one team alone on the group, so a stalled
+    capture means an enemy stands on it, maybe out of sight on a long group. Leaving hands it over
+    (01yellow: the starter sat on the far end of a 30-tile gold field and took it 6 rounds after we
+    left). Stay on the group, find the contester along its tiles and fight it."""
+    pos = me.position()
+    foes = [(e, ep) for e, ep in st.enemies if info.tiles.is_set(ep)]
+    if foes:
+        if len(foes) > 1 + count_near(list(st.ally_pos.values()), pos, 4):
+            give_up(info, st.rnd, 30)  # outnumbered on their side of the group: conceding beats feeding kills
+            return
+        e, ep = min(foes, key=lambda f: f[0].health())
+        if in_range_of(me, [e]):
+            attack(me, e)
+            return
+        precast(me, e)
+        far = ep
+    else:
+        if info.contest_far is None:  # fixed per attempt: recomputed each turn it flipped at the midpoint
+            info.contest_far = max(info.tiles.positions(), key=lambda t: dist(pos, t))
+        far = info.contest_far
+    if not me.can_move():
+        return
+    blocked = st.static_blocked | bc.vision.champion_tiles() | bc.vision.camp_tiles()
+    blocked.set(pos, False)
+    steps = [p for p in blocked.reachable_tiles(pos, 1).positions() if p != pos and info.tiles.is_set(p)]
+    steps.sort(key=lambda p: dist(p, far))
+    for p in steps[:2]:  # one step along the group itself: a routed walk left its tiles and reset the capture
+        if dist(p, far) >= dist(pos, far):
+            break
+        try:
+            if me.move_absolute(p):
+                break
+        except bc.Error:
+            pass
 
 
 def in_range_of(me, units):
@@ -802,6 +847,7 @@ def play_turn():
         return  # turn 1 = setup only (fuel)
     me = bc.me()
     rnd = bc.round_number()
+    st.rnd = rnd
     shop(me)
     if not me.is_alive():
         if st.was_alive:
