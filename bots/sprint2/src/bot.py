@@ -14,6 +14,7 @@ GOLD_WEIGHT = 0.05
 SAFE_SHARE = 0.5
 MULTI_CAMP_FACTOR = 0.65
 SQUAD_WAIT = 80
+ABANDON_BYTE = 6  # shared memory: [6] = abandoned squad group idx + 1, [7] = round % 256
 BLACKLIST_ROUNDS = 60
 CARRIER_GEMS = 15
 CARRIER_HP = 0.5
@@ -188,6 +189,17 @@ def refresh_allies():
             st.enemies.append((e, e.position()))
         except bc.Error:
             pass
+
+
+def abandon_squad(rnd):
+    """Drop the squad target the leader just abandoned. With a timer and a 60-round ban per champion,
+    squad members timed out at staggered rounds and the group never had all of them committed at once
+    (01starfish: five champions circled a need-5 group for ~1000 rounds)."""
+    if len(st.handles) > ABANDON_BYTE:  # bytes 6-7 are then target slots
+        return
+    v, stamp = st.mem[ABANDON_BYTE], st.mem[ABANDON_BYTE + 1]
+    if v and (rnd - stamp) % 256 <= 3 and st.target is not None and st.target.idx == v - 1:
+        give_up(st.target, rnd)
 
 
 def committed_others(info):
@@ -767,10 +779,14 @@ def farm(me, rnd, hp_frac):
         here = squad_here(info)
         if here < info.need:
             st.branch += ":wait%d/%d" % (here, info.need)
-            if info.wait_since is None:
+            if any(k < st.slot for k in committed_others(info)):
+                info.wait_since = None  # only the squad leader times the wait (see abandon_squad)
+            elif info.wait_since is None:
                 info.wait_since = rnd
-            if rnd - info.wait_since > SQUAD_WAIT:
+            elif rnd - info.wait_since > SQUAD_WAIT:
                 give_up(info, rnd)
+                if len(st.handles) <= ABANDON_BYTE:
+                    bc.shared_memory.write(ABANDON_BYTE, bytes([info.idx + 1, rnd % 256]))
                 return
             walk_to(me, ring(info.center, 3, exclude=info.tiles))
             return
@@ -813,6 +829,7 @@ def play_turn():
     if me.is_submitting_gems() or me.is_recalling() or me.is_teleporting():
         return
     read_memory()
+    abandon_squad(rnd)
     refresh_allies()
     observe(rnd)
     hp_frac = me.health() / me.max_health()
