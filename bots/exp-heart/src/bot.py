@@ -21,9 +21,9 @@ CARRIER_HP = 0.5
 MOVE_FUEL_RESERVE = 600_000  # BFS max ~0.5M (measured); 1.3M froze big maps
 STUN_VALUE = 150        # a stun on an enemy champion is worth this much damage (untuned)
 
-PICK_ORDER = [  # Vesper second: 55 Strength, range 3, attack reset, +33% own gold; in 3- and 4-pick games too
-    bc.ChampionDraft.RYTH, bc.ChampionDraft.VESPER_VALE, bc.ChampionDraft.MARCELLA,
-    bc.ChampionDraft.VARG, bc.ChampionDraft.VENDETTA, bc.ChampionDraft.REN,
+PICK_ORDER = [  # Vesper second, Heart third (both leading teams draft both); Vendetta drops to sixth
+    bc.ChampionDraft.RYTH, bc.ChampionDraft.VESPER_VALE, bc.ChampionDraft.HEART_OF_RUIN,
+    bc.ChampionDraft.MARCELLA, bc.ChampionDraft.VARG, bc.ChampionDraft.VENDETTA, bc.ChampionDraft.REN,
     bc.ChampionDraft.CASSI_AND_ISSAC, bc.ChampionDraft.TAVI, bc.ChampionDraft.STELLAR,
     bc.ChampionDraft.PRISM, bc.ChampionDraft.WILLOW,
 ]
@@ -41,8 +41,11 @@ BUILD_RYTH = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
 BUILD_VESPER = [(I.TREASURE_SHARD_OF_STRENGTH, I.TREASURE_EMBLEM_OF_STRENGTH),
                 (I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
                 (I.POWER_SHARD_OF_STRENGTH, I.POWER_EMBLEM_OF_STRENGTH)]
+BUILD_HEART = [(I.TREASURE_SHARD_OF_HEALTH, I.TREASURE_EMBLEM_OF_HEALTH),  # Team A's usual Heart order
+               (I.JUNGLE_SHARD_OF_FOCUS, I.JUNGLE_EMBLEM_OF_FOCUS),
+               (I.BRUISER_SHARD_OF_HEALTH, I.BRUISER_EMBLEM_OF_HEALTH)]
 CT = bc.ChampionType
-BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER,
+BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER, CT.HEART_OF_RUIN: BUILD_HEART,
           CT.STELLAR: BUILD_TANKY_FIRST, CT.PRISM: BUILD_TANKY_FIRST, CT.WILLOW: BUILD_TANKY_FIRST,
           CT.CASSI: BUILD_TANKY_FIRST, CT.TAVI: BUILD_TANKY_FIRST}
 LOCK = bc.ConsumableType.ALTAR_LOCK
