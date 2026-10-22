@@ -780,11 +780,11 @@ def farm(me, rnd, hp_frac):
         here = squad_here(info)
         if here < info.need:
             st.branch += ":wait%d/%d" % (here, info.need)
-            if any(k < st.slot for k in committed_others(info)):
-                info.wait_since = None  # only the squad leader times the wait (see abandon_squad)
-            elif info.wait_since is None:
+            if info.wait_since is None:
                 info.wait_since = rnd
-            elif rnd - info.wait_since > SQUAD_WAIT:
+            # every member keeps its clock but only the leader acts on it (see abandon_squad): clearing
+            # followers' clocks restarted the wait whenever leadership changed, so it never ended (00swirl)
+            elif rnd - info.wait_since > SQUAD_WAIT and not any(k < st.slot for k in committed_others(info)):
                 give_up(info, rnd)
                 if len(st.handles) <= ABANDON_BYTE:
                     bc.shared_memory.write(ABANDON_BYTE, bytes([info.idx + 1, rnd // 8]))
