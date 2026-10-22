@@ -14,7 +14,7 @@ GOLD_WEIGHT = 0.05
 SAFE_SHARE = 0.5
 MULTI_CAMP_FACTOR = 0.65
 SQUAD_WAIT = 80
-ABANDON_BYTE = 6  # shared memory: [6] = abandoned squad group idx + 1, [7] = round % 256
+ABANDON_BYTE = 6  # shared memory: [6] = abandoned squad group idx + 1, [7] = round // 8
 BLACKLIST_ROUNDS = 60
 CARRIER_GEMS = 15
 CARRIER_HP = 0.5
@@ -198,7 +198,8 @@ def abandon_squad(rnd):
     if len(st.handles) > ABANDON_BYTE:  # bytes 6-7 are then target slots
         return
     v, stamp = st.mem[ABANDON_BYTE], st.mem[ABANDON_BYTE + 1]
-    if v and (rnd - stamp) % 256 <= 3 and st.target is not None and st.target.idx == v - 1:
+    # round // 8 never wraps in a 2000-round game; round % 256 did, reviving old orders every 256 rounds
+    if v and 0 <= rnd // 8 - stamp <= 1 and st.target is not None and st.target.idx == v - 1:
         give_up(st.target, rnd)
 
 
@@ -786,7 +787,7 @@ def farm(me, rnd, hp_frac):
             elif rnd - info.wait_since > SQUAD_WAIT:
                 give_up(info, rnd)
                 if len(st.handles) <= ABANDON_BYTE:
-                    bc.shared_memory.write(ABANDON_BYTE, bytes([info.idx + 1, rnd % 256]))
+                    bc.shared_memory.write(ABANDON_BYTE, bytes([info.idx + 1, rnd // 8]))
                 return
             walk_to(me, ring(info.center, 3, exclude=info.tiles))
             return
