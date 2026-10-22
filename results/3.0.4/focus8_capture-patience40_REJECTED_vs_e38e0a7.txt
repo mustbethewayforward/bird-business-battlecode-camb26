@@ -1,0 +1,9 @@
+00contes-a   base W  200-0    g11620 st18 | cand W    0-0    g10620 st18
+00contes-b   base W    0-0    g14260 st12 | cand W    0-0    g13740 st14
+00fragme-a   base W  936-250  g 9722 st10 | cand W  960-158  g10018 st7 
+00packs.-a   base W 1018-484  g 7950 st8  | cand W  936-734  g 7804 st12
+01starva-a   base W  560-0    g 3296 st0  | cand W  560-0    g 3296 st0 
+01starva-b   base W  620-0    g 3256 st0  | cand W  620-0    g 3256 st0 
+01yellow-a   base W 1001-167  g 9200 st11 | cand W 1003-84   g 9056 st6 
+01yellow-b   base W 1001-185  g 8104 st9  | cand W  818-327  g 8068 st9 
+games 8 | wins base 8 cand 8 (gained 0, lost 0) | gems 5336 -> 4897 | gold 67408 -> 65858 | deaths 19 -> 27 | fuelcap 30 -> 37 | stolen 68 -> 66
