@@ -22,9 +22,9 @@ CARRIER_HP = 0.5
 MOVE_FUEL_RESERVE = 600_000  # BFS max ~0.5M (measured); 1.3M froze big maps
 STUN_VALUE = 150        # a stun on an enemy champion is worth this much damage (untuned)
 
-PICK_ORDER = [
-    bc.ChampionDraft.RYTH, bc.ChampionDraft.VARG, bc.ChampionDraft.MARCELLA,
-    bc.ChampionDraft.VENDETTA, bc.ChampionDraft.REN, bc.ChampionDraft.VESPER_VALE,
+PICK_ORDER = [  # core trio first so 3-pick maps get it: Vesper damage/income, Vendetta finisher, Heart frontline
+    bc.ChampionDraft.VESPER_VALE, bc.ChampionDraft.VENDETTA, bc.ChampionDraft.HEART_OF_RUIN,
+    bc.ChampionDraft.MARCELLA, bc.ChampionDraft.RYTH, bc.ChampionDraft.VARG, bc.ChampionDraft.REN,
     bc.ChampionDraft.CASSI_AND_ISSAC, bc.ChampionDraft.TAVI, bc.ChampionDraft.STELLAR,
     bc.ChampionDraft.PRISM, bc.ChampionDraft.WILLOW,
 ]
@@ -39,11 +39,20 @@ BUILD_TANKY_FIRST = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
 BUILD_RYTH = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
               (I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
               (I.POWER_SHARD_OF_HEALTH, I.POWER_EMBLEM_OF_HEALTH)]
-BUILD_VESPER = [(I.TREASURE_SHARD_OF_STRENGTH, I.TREASURE_EMBLEM_OF_STRENGTH),
-                (I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
+BUILD_VESPER = [(I.TREASURE_SHARD_OF_STRENGTH, I.TREASURE_EMBLEM_OF_STRENGTH),  # leading team's order
+                (I.BRUISER_SHARD_OF_STRENGTH, I.BRUISER_EMBLEM_OF_STRENGTH),
+                (I.DURABILITY_SHARD_OF_HEALTH, I.DURABILITY_EMBLEM_OF_HEALTH),
                 (I.POWER_SHARD_OF_STRENGTH, I.POWER_EMBLEM_OF_STRENGTH)]
+BUILD_VENDETTA = [(I.TREASURE_SHARD_OF_HEALTH, I.TREASURE_EMBLEM_OF_HEALTH),
+                  (I.JUNGLE_SHARD_OF_STRENGTH, I.JUNGLE_EMBLEM_OF_STRENGTH),
+                  (I.BRUISER_SHARD_OF_HEALTH, I.BRUISER_EMBLEM_OF_HEALTH),
+                  (I.DURABILITY_SHARD_OF_HEALTH, I.DURABILITY_EMBLEM_OF_HEALTH),
+                  (I.BRUISER_SHARD_OF_STRENGTH, I.BRUISER_EMBLEM_OF_STRENGTH)]
+BUILD_HEART = [(I.TREASURE_SHARD_OF_HEALTH, I.TREASURE_EMBLEM_OF_HEALTH),
+               (I.JUNGLE_SHARD_OF_FOCUS, I.JUNGLE_EMBLEM_OF_FOCUS),
+               (I.BRUISER_SHARD_OF_HEALTH, I.BRUISER_EMBLEM_OF_HEALTH)]
 CT = bc.ChampionType
-BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER,
+BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER, CT.VENDETTA: BUILD_VENDETTA, CT.HEART_OF_RUIN: BUILD_HEART,
           CT.STELLAR: BUILD_TANKY_FIRST, CT.PRISM: BUILD_TANKY_FIRST, CT.WILLOW: BUILD_TANKY_FIRST,
           CT.CASSI: BUILD_TANKY_FIRST, CT.TAVI: BUILD_TANKY_FIRST}
 LOCK = bc.ConsumableType.ALTAR_LOCK
@@ -79,7 +88,8 @@ class GroupInfo:
         self.hp = sum(s.base_health for s in stats)
         self.dps = sum(s.base_strength for s in stats)
         factor = 1.0 if len(camps) == 1 else MULTI_CAMP_FACTOR
-        self.need = squad_size(self.hp, self.dps * factor, avg_str, avg_hp, n_allies)
+        self.dps_eff = self.dps * factor
+        self.need = squad_size(self.hp, self.dps_eff, avg_str, avg_hp, n_allies)
         self.in_bush = not (self.tiles & st.bushes).is_empty()
         unmodelled = any(c.kind() not in MODELLED_CAMPS for c in camps)  # monolith, golem (3.0.1), anything newer
         self.skip = unmodelled or (self.gems == 0 and self.gold == 0)
@@ -128,6 +138,12 @@ class State:
     was_alive = True
     rng = 1
     varg = False
+    heart = False
+    base_hp = 1.0
+    base_str = 1.0
+    n_allies = 1
+    avg_hp = 0.0
+    avg_str = 0.0
     camp_str = {}
     branch = ""
     reach_budget = 0
@@ -155,9 +171,13 @@ def init():
     st.slot = st.handles.index(int(me))
     st.rng = me.attack_range()
     st.varg = me.champion_name() == CT.VARG
+    st.heart = me.champion_name() == CT.HEART_OF_RUIN
     stats = [c.base_stats() for c in allies]
     avg_str = sum(s.base_strength for s in stats) / len(stats)
     avg_hp = sum(s.base_health for s in stats) / len(stats)
+    st.avg_str, st.avg_hp, st.n_allies = avg_str, avg_hp, len(allies)
+    mine = me.base_stats()
+    st.base_str, st.base_hp = mine.base_strength, mine.base_health
     st.groups = []
     for i, g in enumerate(gm.camp_groups()):
         info = GroupInfo(i, g, avg_str, avg_hp, len(allies))
@@ -165,6 +185,19 @@ def init():
     st.ready = True
     dbg("init slot=%d %s groups=%s" % (st.slot, me.champion_name(),
         [(g.idx, g.gems, g.need) for g in st.groups if not g.skip]))
+
+
+def refresh_needs(me, rnd):
+    """Squad sizes came from starting stats only, so groups stayed out of reach however many items
+    we bought (01elk_arena: its only gem group needed all 5, and with one champion usually dead it was
+    never eligible). Every 50 rounds, rescale the team's average stats by this champion's own growth."""
+    if rnd % 50:
+        return
+    fs = me.strength() / max(1.0, st.base_str)
+    fh = me.max_health() / max(1.0, st.base_hp)
+    for info in st.groups:
+        if not info.skip:
+            info.need = squad_size(info.hp, info.dps_eff, st.avg_str * fs, st.avg_hp * fh, st.n_allies)
 
 
 def read_memory():
@@ -320,9 +353,9 @@ def shop(me):
     gold = me.gold_count()
     counts = me.item_count()
     first_emblem_done = False
-    for shard, emblem in BUILDS.get(name, BUILD_DEFAULT):
-        if counts[int(emblem)] >= 1 and emblem != I.POWER_EMBLEM_OF_STRENGTH \
-                and emblem != I.POWER_EMBLEM_OF_HEALTH:
+    build = BUILDS.get(name, BUILD_DEFAULT)
+    for shard, emblem in build:
+        if counts[int(emblem)] >= 1 and (shard, emblem) != build[-1]:  # the last entry repeats
             first_emblem_done = True
             continue
         n = min(gold // shard.cost(), 5 - counts[int(shard)])
@@ -461,11 +494,59 @@ def shield(me):
             return
 
 
+def heart_cast(me, units):
+    """Heart of Ruin (one cast per turn): shield when taking damage below 80% HP, else dash-strike.
+    The dash is flagged only is_dash, so best_spell never used it: it lands up to 2 tiles away and hits
+    everything within 1 of the landing tile for 1.5x Focus with a 1-round stun. Dash only at 50%+ HP and
+    onto a tile where enemy champions within 2 do not outnumber allies within 2."""
+    if not st.heart or not me.can_cast():
+        return False
+    pos = me.position()
+    for ab in me.abilities():
+        try:
+            if ab.is_shield() and ab.is_ready() and st.hurt and me.health() < 0.8 * me.max_health():
+                return ab.use()
+        except bc.Error:
+            return False
+    if me.health() < 0.5 * me.max_health():
+        return False
+    pts = []
+    for u in units:
+        try:
+            if u.is_visible() and u.health() > 0:
+                pts.append(u.position())
+        except bc.Error:
+            pass
+    if not pts:
+        return False
+    foes = [ep for _, ep in st.enemies]
+    friends = list(st.ally_pos.values())
+    for ab in me.abilities():
+        try:
+            if not (ab.is_dash() and ab.is_ready()):
+                continue
+            land = bc.Bitboard()
+            land.draw_chebyshev(pos, int(ab.info().range))
+            land &= st.connected
+            land &= ~(bc.vision.champion_tiles() | bc.vision.camp_tiles())
+            best, best_n = None, 0
+            for t in land.positions():
+                n = count_near(pts, t, 1)
+                if n > best_n and count_near(foes, t, 2) <= count_near(friends, t, 2):
+                    best, best_n = t, n
+            if best is not None:
+                return ab.use(best)
+        except bc.Error:
+            return False
+    return False
+
+
 def hit_back(me):
     if not me.can_attack():
         return False
     targets = in_range_of(me, enemies_visible())
     if targets:
+        heart_cast(me, targets)
         attack(me, min(targets, key=lambda u: u.health()))
         return True
     camps = [c for c in in_range_of(me, bc.vision.camps()) if c.is_awake()]
@@ -686,7 +767,7 @@ def give_up(info, rnd, rounds=BLACKLIST_ROUNDS):
 
 def capture(me, info, rnd):
     others = committed_others(info)
-    if any(k < st.slot for k in others):
+    if any(k < st.slot for k in others) and not info.tiles.is_set(me.position()):  # on the group: capture now
         st.blacklist[info.idx] = rnd + 8
         commit(None)
         return
@@ -765,6 +846,7 @@ def best_camp(cands, live):
 
 
 def fight(me, live, info, rnd):
+    heart_cast(me, live)  # before moving: the dash can close the distance
     in_range = in_range_of(me, live)
     if not in_range:
         pos = me.position()
@@ -877,6 +959,7 @@ def play_turn():
         return
     read_memory()
     abandon_squad(rnd)
+    refresh_needs(me, rnd)
     refresh_allies()
     observe(rnd)
     hp_frac = me.health() / me.max_health()
