@@ -22,9 +22,9 @@ CARRIER_HP = 0.5
 MOVE_FUEL_RESERVE = 600_000  # BFS max ~0.5M (measured); 1.3M froze big maps
 STUN_VALUE = 150        # a stun on an enemy champion is worth this much damage (untuned)
 
-PICK_ORDER = [
-    bc.ChampionDraft.RYTH, bc.ChampionDraft.VARG, bc.ChampionDraft.MARCELLA,
-    bc.ChampionDraft.VENDETTA, bc.ChampionDraft.REN, bc.ChampionDraft.VESPER_VALE,
+PICK_ORDER = [  # core trio first so 3-pick maps get it: Vesper damage/income, Vendetta finisher, Heart frontline
+    bc.ChampionDraft.VESPER_VALE, bc.ChampionDraft.VENDETTA, bc.ChampionDraft.HEART_OF_RUIN,
+    bc.ChampionDraft.MARCELLA, bc.ChampionDraft.RYTH, bc.ChampionDraft.VARG, bc.ChampionDraft.REN,
     bc.ChampionDraft.CASSI_AND_ISSAC, bc.ChampionDraft.TAVI, bc.ChampionDraft.STELLAR,
     bc.ChampionDraft.PRISM, bc.ChampionDraft.WILLOW,
 ]
@@ -39,11 +39,20 @@ BUILD_TANKY_FIRST = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
 BUILD_RYTH = [(I.JUNGLE_SHARD_OF_HEALTH, I.JUNGLE_EMBLEM_OF_HEALTH),
               (I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
               (I.POWER_SHARD_OF_HEALTH, I.POWER_EMBLEM_OF_HEALTH)]
-BUILD_VESPER = [(I.TREASURE_SHARD_OF_STRENGTH, I.TREASURE_EMBLEM_OF_STRENGTH),
-                (I.MONSTER_SHARD_OF_STRENGTH, I.MONSTER_EMBLEM_OF_STRENGTH),
+BUILD_VESPER = [(I.TREASURE_SHARD_OF_STRENGTH, I.TREASURE_EMBLEM_OF_STRENGTH),  # leading team's order
+                (I.BRUISER_SHARD_OF_STRENGTH, I.BRUISER_EMBLEM_OF_STRENGTH),
+                (I.DURABILITY_SHARD_OF_HEALTH, I.DURABILITY_EMBLEM_OF_HEALTH),
                 (I.POWER_SHARD_OF_STRENGTH, I.POWER_EMBLEM_OF_STRENGTH)]
+BUILD_VENDETTA = [(I.TREASURE_SHARD_OF_HEALTH, I.TREASURE_EMBLEM_OF_HEALTH),
+                  (I.JUNGLE_SHARD_OF_STRENGTH, I.JUNGLE_EMBLEM_OF_STRENGTH),
+                  (I.BRUISER_SHARD_OF_HEALTH, I.BRUISER_EMBLEM_OF_HEALTH),
+                  (I.DURABILITY_SHARD_OF_HEALTH, I.DURABILITY_EMBLEM_OF_HEALTH),
+                  (I.BRUISER_SHARD_OF_STRENGTH, I.BRUISER_EMBLEM_OF_STRENGTH)]
+BUILD_HEART = [(I.TREASURE_SHARD_OF_HEALTH, I.TREASURE_EMBLEM_OF_HEALTH),
+               (I.JUNGLE_SHARD_OF_FOCUS, I.JUNGLE_EMBLEM_OF_FOCUS),
+               (I.BRUISER_SHARD_OF_HEALTH, I.BRUISER_EMBLEM_OF_HEALTH)]
 CT = bc.ChampionType
-BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER,
+BUILDS = {CT.RYTH: BUILD_RYTH, CT.VESPER_VALE: BUILD_VESPER, CT.VENDETTA: BUILD_VENDETTA, CT.HEART_OF_RUIN: BUILD_HEART,
           CT.STELLAR: BUILD_TANKY_FIRST, CT.PRISM: BUILD_TANKY_FIRST, CT.WILLOW: BUILD_TANKY_FIRST,
           CT.CASSI: BUILD_TANKY_FIRST, CT.TAVI: BUILD_TANKY_FIRST}
 LOCK = bc.ConsumableType.ALTAR_LOCK
@@ -320,9 +329,9 @@ def shop(me):
     gold = me.gold_count()
     counts = me.item_count()
     first_emblem_done = False
-    for shard, emblem in BUILDS.get(name, BUILD_DEFAULT):
-        if counts[int(emblem)] >= 1 and emblem != I.POWER_EMBLEM_OF_STRENGTH \
-                and emblem != I.POWER_EMBLEM_OF_HEALTH:
+    build = BUILDS.get(name, BUILD_DEFAULT)
+    for shard, emblem in build:
+        if counts[int(emblem)] >= 1 and (shard, emblem) != build[-1]:  # the last entry repeats
             first_emblem_done = True
             continue
         n = min(gold // shard.cost(), 5 - counts[int(shard)])
