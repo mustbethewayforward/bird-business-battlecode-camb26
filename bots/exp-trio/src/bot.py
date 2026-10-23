@@ -767,7 +767,7 @@ def give_up(info, rnd, rounds=BLACKLIST_ROUNDS):
 
 def capture(me, info, rnd):
     others = committed_others(info)
-    if any(k < st.slot for k in others):
+    if any(k < st.slot for k in others) and not info.tiles.is_set(me.position()):  # on the group: capture now
         st.blacklist[info.idx] = rnd + 8
         commit(None)
         return
