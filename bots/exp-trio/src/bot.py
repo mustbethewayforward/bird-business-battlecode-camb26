@@ -846,7 +846,10 @@ def best_camp(cands, live):
 
 
 def fight(me, live, info, rnd):
-    heart_cast(me, live)  # before moving: the dash can close the distance
+    if heart_cast(me, live):  # before moving: the dash can close the distance
+        live = [c for c in live if c.is_visible()]  # the dash moved Heart; reading an unseen camp raised
+        if not live:
+            return
     in_range = in_range_of(me, live)
     if not in_range:
         pos = me.position()
