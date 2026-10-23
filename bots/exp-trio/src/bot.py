@@ -88,7 +88,8 @@ class GroupInfo:
         self.hp = sum(s.base_health for s in stats)
         self.dps = sum(s.base_strength for s in stats)
         factor = 1.0 if len(camps) == 1 else MULTI_CAMP_FACTOR
-        self.need = squad_size(self.hp, self.dps * factor, avg_str, avg_hp, n_allies)
+        self.dps_eff = self.dps * factor
+        self.need = squad_size(self.hp, self.dps_eff, avg_str, avg_hp, n_allies)
         self.in_bush = not (self.tiles & st.bushes).is_empty()
         unmodelled = any(c.kind() not in MODELLED_CAMPS for c in camps)  # monolith, golem (3.0.1), anything newer
         self.skip = unmodelled or (self.gems == 0 and self.gold == 0)
@@ -138,6 +139,11 @@ class State:
     rng = 1
     varg = False
     heart = False
+    base_hp = 1.0
+    base_str = 1.0
+    n_allies = 1
+    avg_hp = 0.0
+    avg_str = 0.0
     camp_str = {}
     branch = ""
     reach_budget = 0
@@ -169,6 +175,9 @@ def init():
     stats = [c.base_stats() for c in allies]
     avg_str = sum(s.base_strength for s in stats) / len(stats)
     avg_hp = sum(s.base_health for s in stats) / len(stats)
+    st.avg_str, st.avg_hp, st.n_allies = avg_str, avg_hp, len(allies)
+    mine = me.base_stats()
+    st.base_str, st.base_hp = mine.base_strength, mine.base_health
     st.groups = []
     for i, g in enumerate(gm.camp_groups()):
         info = GroupInfo(i, g, avg_str, avg_hp, len(allies))
@@ -176,6 +185,19 @@ def init():
     st.ready = True
     dbg("init slot=%d %s groups=%s" % (st.slot, me.champion_name(),
         [(g.idx, g.gems, g.need) for g in st.groups if not g.skip]))
+
+
+def refresh_needs(me, rnd):
+    """Squad sizes came from starting stats only, so groups stayed out of reach however many items
+    we bought (01elk_arena: its only gem group needed all 5, and with one champion usually dead it was
+    never eligible). Every 50 rounds, rescale the team's average stats by this champion's own growth."""
+    if rnd % 50:
+        return
+    fs = me.strength() / max(1.0, st.base_str)
+    fh = me.max_health() / max(1.0, st.base_hp)
+    for info in st.groups:
+        if not info.skip:
+            info.need = squad_size(info.hp, info.dps_eff, st.avg_str * fs, st.avg_hp * fh, st.n_allies)
 
 
 def read_memory():
@@ -937,6 +959,7 @@ def play_turn():
         return
     read_memory()
     abandon_squad(rnd)
+    refresh_needs(me, rnd)
     refresh_allies()
     observe(rnd)
     hp_frac = me.health() / me.max_health()
