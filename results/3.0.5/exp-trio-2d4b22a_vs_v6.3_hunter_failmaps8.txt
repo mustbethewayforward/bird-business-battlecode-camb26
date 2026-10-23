@@ -1,0 +1,9 @@
+00pilgri-a   base W  120-90   g 3940 st0  | cand W  150-105  g 4448 st0 
+00pilgri-b   base W   90-86   g 2994 st0  | cand W  187-23   g 3103 st0 
+01concen-a   base L  303-338  g 2672 st0  | cand L  377-390  g 3760 st0 
+01concen-b   base L  134-603  g 1976 st0  | cand L  193-480  g 2468 st2 
+01elk_ar-a   base L    0-576  g 6980 st10 | cand L  360-504  g 9089 st9 
+01elk_ar-b   base L    0-1008 g 7060 st10 | cand L    0-648  g 5914 st10
+01fractu-a   base L  156-204  g 2738 st1  | cand W  321-215  g 4294 st0  GAIN
+01fractu-b   base L  226-262  g 3068 st1  | cand W  425-223  g 4626 st0  GAIN
+games 8 | wins base 2 cand 4 (gained 2, lost 0) | gems 1029 -> 2013 | gold 31428 -> 37702 | deaths 311 -> 368 | fuelcap 25 -> 0 | stolen 22 -> 21
