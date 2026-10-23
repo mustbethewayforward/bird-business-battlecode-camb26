@@ -137,6 +137,7 @@ class State:
     was_alive = True
     rng = 1
     varg = False
+    heart = False
     camp_str = {}
     branch = ""
     reach_budget = 0
@@ -164,6 +165,7 @@ def init():
     st.slot = st.handles.index(int(me))
     st.rng = me.attack_range()
     st.varg = me.champion_name() == CT.VARG
+    st.heart = me.champion_name() == CT.HEART_OF_RUIN
     stats = [c.base_stats() for c in allies]
     avg_str = sum(s.base_strength for s in stats) / len(stats)
     avg_hp = sum(s.base_health for s in stats) / len(stats)
@@ -470,11 +472,59 @@ def shield(me):
             return
 
 
+def heart_cast(me, units):
+    """Heart of Ruin (one cast per turn): shield when taking damage below 80% HP, else dash-strike.
+    The dash is flagged only is_dash, so best_spell never used it: it lands up to 2 tiles away and hits
+    everything within 1 of the landing tile for 1.5x Focus with a 1-round stun. Dash only at 50%+ HP and
+    onto a tile where enemy champions within 2 do not outnumber allies within 2."""
+    if not st.heart or not me.can_cast():
+        return False
+    pos = me.position()
+    for ab in me.abilities():
+        try:
+            if ab.is_shield() and ab.is_ready() and st.hurt and me.health() < 0.8 * me.max_health():
+                return ab.use()
+        except bc.Error:
+            return False
+    if me.health() < 0.5 * me.max_health():
+        return False
+    pts = []
+    for u in units:
+        try:
+            if u.is_visible() and u.health() > 0:
+                pts.append(u.position())
+        except bc.Error:
+            pass
+    if not pts:
+        return False
+    foes = [ep for _, ep in st.enemies]
+    friends = list(st.ally_pos.values())
+    for ab in me.abilities():
+        try:
+            if not (ab.is_dash() and ab.is_ready()):
+                continue
+            land = bc.Bitboard()
+            land.draw_chebyshev(pos, int(ab.info().range))
+            land &= st.connected
+            land &= ~(bc.vision.champion_tiles() | bc.vision.camp_tiles())
+            best, best_n = None, 0
+            for t in land.positions():
+                n = count_near(pts, t, 1)
+                if n > best_n and count_near(foes, t, 2) <= count_near(friends, t, 2):
+                    best, best_n = t, n
+            if best is not None:
+                return ab.use(best)
+        except bc.Error:
+            return False
+    return False
+
+
 def hit_back(me):
     if not me.can_attack():
         return False
     targets = in_range_of(me, enemies_visible())
     if targets:
+        heart_cast(me, targets)
         attack(me, min(targets, key=lambda u: u.health()))
         return True
     camps = [c for c in in_range_of(me, bc.vision.camps()) if c.is_awake()]
@@ -774,6 +824,7 @@ def best_camp(cands, live):
 
 
 def fight(me, live, info, rnd):
+    heart_cast(me, live)  # before moving: the dash can close the distance
     in_range = in_range_of(me, live)
     if not in_range:
         pos = me.position()
