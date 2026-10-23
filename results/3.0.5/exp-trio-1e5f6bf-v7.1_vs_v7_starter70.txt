@@ -1,0 +1,71 @@
+00ambush-a   base W  702-531  g10152 st0  | cand W  675-531  g10308 st0 
+00ambush-b   base W  387-362  g 8933 st0  | cand W  729-334  g 9367 st1 
+00collis-a   base W 1033-63   g 6431 st0  | cand W 1039-79   g 6751 st0 
+00collis-b   base W 1004-128  g 6101 st1  | cand W 1061-73   g 5978 st1 
+00contes-a   base W    0-0    g18520 st5  | cand W    0-0    g19024 st2 
+00contes-b   base W    0-0    g21701 st5  | cand W    0-0    g20295 st5 
+00corner-a   base W 1009-36   g10020 st1  | cand W 1000-36   g10254 st1 
+00corner-b   base W 1006-95   g 9977 st2  | cand W 1025-118  g 9834 st2 
+00eight.-a   base W 1000-40   g 8601 st2  | cand W 1006-71   g 8626 st0 
+00eight.-b   base W 1000-57   g 7391 st1  | cand W 1004-42   g 7477 st0 
+00elkrin-a   base W 1001-462  g 6616 st0  | cand W 1067-220  g 7877 st0 
+00elkrin-b   base W 1005-92   g 7991 st0  | cand W 1038-385  g 8379 st0 
+00expans-a   base W 1000-166  g 8319 st0  | cand W 1021-456  g 9668 st0 
+00expans-b   base W 1012-304  g 7708 st1  | cand W 1008-304  g 7568 st1 
+00fragme-a   base W  970-150  g12514 st1  | cand W  946-200  g12922 st5 
+00fragme-b   base W 1012-50   g11249 st1  | cand W 1012-28   g12351 st0 
+00interl-a   base W 1005-88   g 7139 st0  | cand W 1005-88   g 7139 st0 
+00interl-b   base W 1010-113  g 7868 st1  | cand W 1010-113  g 7868 st1 
+00lanes.-a   base W 1029-314  g 7163 st2  | cand W 1001-392  g 6361 st2 
+00lanes.-b   base W 1010-265  g 5846 st2  | cand W 1035-510  g 7972 st4 
+00monoli-a   base W 1000-150  g 8021 st1  | cand W 1012-162  g 8243 st1 
+00monoli-b   base W 1008-43   g 8139 st0  | cand W 1020-43   g 8014 st0 
+00packs.-a   base W 1016-314  g 8653 st1  | cand W 1022-180  g 8592 st1 
+00packs.-b   base W 1010-100  g 7343 st0  | cand W 1014-72   g 7358 st1 
+00pilgri-a   base W  243-0    g 4802 st0  | cand W  228-0    g 4242 st0 
+00pilgri-b   base W  383-0    g 6907 st0  | cand W  523-0    g 6830 st0 
+00quadra-a   base W 1036-232  g 2296 st0  | cand W 1036-236  g 2378 st0 
+00quadra-b   base W 1018-212  g 2493 st0  | cand W 1018-212  g 2579 st0 
+00revers-a   base L  196-249  g  287 st1  | cand L  196-249  g  287 st1 
+00revers-b   base W  282-156  g  473 st0  | cand W  282-156  g  473 st0 
+00rows.m-a   base W  445-346  g 8840 st0  | cand L  178-377  g 5334 st0  LOSS
+00rows.m-b   base L  308-351  g 6711 st0  | cand L  289-351  g 6104 st0 
+00rushba-a   base W 1021-46   g 7176 st0  | cand W 1041-103  g 8093 st0 
+00rushba-b   base W 1002-103  g 6466 st1  | cand W 1013-115  g 6112 st1 
+00split.-a   base W 1002-52   g 2477 st0  | cand W 1012-52   g 2323 st0 
+00split.-b   base W 1001-60   g 2504 st0  | cand W 1019-60   g 2564 st0 
+00stampe-a   base W    0-0    g12314 st3  | cand W  160-0    g12500 st2 
+00stampe-b   base W  640-0    g12534 st1  | cand W  320-0    g13174 st4 
+00swirl.-a   base W 1073-136  g14306 st1  | cand W  874-230  g12749 st1 
+00swirl.-b   base W 1004-106  g12759 st0  | cand W 1036-94   g12480 st0 
+01big_wo-a   base W  547-400  g 1924 st0  | cand W  579-413  g 2053 st0 
+01big_wo-b   base W  556-150  g 2051 st0  | cand W  614-221  g 2586 st0 
+01boss_b-a   base W    0-0    g 7352 st0  | cand W    0-0    g 5792 st0 
+01boss_b-b   base W    0-0    g12675 st0  | cand W    0-0    g10749 st0 
+01broken-a   base W 1021-88   g 5806 st1  | cand W 1011-132  g 5984 st1 
+01broken-b   base W 1011-206  g 4966 st0  | cand W 1011-206  g 4966 st0 
+01concen-a   base W  703-68   g 6929 st1  | cand W  658-134  g 6308 st1 
+01concen-b   base W  679-131  g 6516 st1  | cand W  834-153  g 6830 st1 
+01corrid-a   base W  609-253  g 5416 st0  | cand W  609-253  g 5416 st0 
+01corrid-b   base W  456-209  g 4458 st1  | cand W  456-209  g 4458 st1 
+01elk_ar-a   base W 1008-0    g12485 st1  | cand W 1008-0    g14596 st1 
+01elk_ar-b   base W 1008-0    g13736 st1  | cand W 1008-0    g12462 st0 
+01fractu-a   base W  746-52   g 7512 st0  | cand W  746-52   g 7512 st0 
+01fractu-b   base W  823-68   g 7508 st2  | cand W  767-68   g 7400 st3 
+01gold_r-a   base W 1007-66   g 5440 st1  | cand W 1001-132  g 5717 st3 
+01gold_r-b   base W 1006-259  g 6008 st2  | cand W 1006-259  g 6056 st2 
+01hooks.-a   base W 1001-22   g14482 st4  | cand W 1012-0    g13854 st3 
+01hooks.-b   base W 1001-11   g13730 st1  | cand W 1012-0    g12933 st2 
+01island-a   base W  698-0    g 5830 st0  | cand W  872-0    g 7620 st0 
+01island-b   base W  932-90   g 5803 st0  | cand W  756-148  g 4513 st0 
+01shortc-a   base W  773-0    g 1930 st0  | cand W  754-0    g 2035 st0 
+01shortc-b   base W  788-0    g 1523 st0  | cand W  720-0    g 1198 st0 
+01starfi-a   base W 1044-212  g 6902 st0  | cand W 1001-204  g 7267 st0 
+01starfi-b   base W 1040-95   g 7233 st0  | cand W 1015-216  g 6169 st0 
+01starva-a   base W  712-0    g 4151 st0  | cand W  712-0    g 3947 st0 
+01starva-b   base W  752-0    g 4334 st0  | cand W  760-0    g 4342 st0 
+01the_fa-a   base W   54-0    g  246 st0  | cand W   54-0    g  246 st0 
+01the_fa-b   base W   54-0    g  246 st0  | cand W   54-0    g  246 st0 
+01yellow-a   base W 1017-30   g12400 st0  | cand W 1009-45   g13497 st0 
+01yellow-b   base W 1023-105  g11219 st4  | cand W 1023-105  g11219 st4 
+games 70 | wins base 68 cand 67 (gained 0, lost 1) | gems 53952 -> 54037 | gold 526552 -> 524419 | deaths 96 -> 112 | fuelcap 58 -> 58 | stolen 54 -> 59
