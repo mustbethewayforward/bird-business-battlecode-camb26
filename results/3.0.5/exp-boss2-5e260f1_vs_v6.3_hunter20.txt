@@ -1,0 +1,21 @@
+00ambush-a   base W  239-37   g 5130 st0  | cand W  239-37   g 5130 st0 
+00ambush-b   base W  533-99   g 7956 st0  | cand W  533-99   g 7956 st0 
+00contes-a   base L    0-0    g 1560 st10 | cand L    0-0    g 1760 st7 
+00contes-b   base L    0-0    g 3440 st7  | cand L    0-0    g 3440 st7 
+00eight.-a   base L  133-605  g  702 st2  | cand L  133-605  g  702 st2 
+00eight.-b   base L  284-361  g 1712 st1  | cand L  284-361  g 1712 st1 
+00expans-a   base W  531-126  g 3636 st0  | cand W  531-126  g 3636 st0 
+00expans-b   base W  563-30   g 3624 st0  | cand W  563-30   g 3624 st0 
+00packs.-a   base L  340-1008 g 2420 st8  | cand L  340-1008 g 2420 st8 
+00packs.-b   base L  124-1016 g 1568 st3  | cand L  124-1016 g 1568 st3 
+00split.-a   base L  212-1021 g 1308 st2  | cand L  212-1021 g 1308 st2 
+00split.-b   base L  253-791  g 1060 st2  | cand L  253-791  g 1060 st2 
+00swirl.-a   base L  128-435  g 4450 st2  | cand L  128-435  g 4450 st2 
+00swirl.-b   base L  205-450  g 4520 st2  | cand L  205-450  g 4520 st2 
+01boss_b-a   base W    0-0    g 5070 st0  | cand W    0-0    g 4570 st0 
+01boss_b-b   base W    0-0    g 5900 st0  | cand W    0-0    g 6180 st0 
+01corrid-a   base W  232-80   g 2116 st2  | cand W  232-80   g 2116 st2 
+01corrid-b   base W  149-73   g 2116 st1  | cand W  149-73   g 2116 st1 
+01island-a   base W  260-38   g 3220 st0  | cand W  180-118  g 3000 st0 
+01island-b   base W  444-88   g 4190 st0  | cand W  326-30   g 3260 st1 
+games 20 | wins base 10 cand 10 (gained 0, lost 0) | gems 4630 -> 4432 | gold 65698 -> 64528 | deaths 874 -> 898 | fuelcap 20 -> 20 | stolen 42 -> 40
